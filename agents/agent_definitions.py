@@ -74,12 +74,16 @@ class AgentFactory:
         definition = cls._definitions.get(agent_name)
         if not definition:
             return None
-        
+
         config = config or get_config()
         config.max_iterations = definition.max_iterations
-        
+
         tools = definition.get_tools()
-        return ReActOrchestrator(tools=tools, config=config)
+        return ReActOrchestrator(
+            tools=tools,
+            config=config,
+            system_prompt=definition.system_prompt
+        )
 
 
 # ============================================

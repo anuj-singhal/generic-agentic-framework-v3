@@ -72,7 +72,7 @@ class TestRunner:
         """Initialize the framework components."""
         from core.config import FrameworkConfig, ModelConfig
         from agents.agent_definitions import create_agent
-        
+
         self.config = FrameworkConfig(
             model=ModelConfig(
                 model_name="gpt-4o-mini",
@@ -81,18 +81,23 @@ class TestRunner:
             ),
             max_iterations=10
         )
-        
-        # Import tools to register them
-        from tools.example_tools import get_all_tools
+
+        # Import all tools to register them (imports duckdb, sql, name_matching tools)
+        from tools import get_all_tools, get_sql_tools, get_name_matching_tools, get_all_duckdb_tools
         self.tools = get_all_tools()
-        
-        print(f"[OK] Framework initialized with {len(self.tools)} tools")
+
+        # Count all registered tools
+        from core.tools_base import tool_registry
+        all_tools = tool_registry.get_all_tools()
+        print(f"[OK] Framework initialized with {len(all_tools)} tools")
     
     def run_single_test(self, example: Dict[str, Any]) -> TestResult:
         """Run a single test example."""
         from agents.agent_definitions import create_agent
         from core.config import FrameworkConfig, ModelConfig
-        
+        # Ensure all tools are registered
+        from tools import get_all_tools, get_sql_tools, get_name_matching_tools, get_all_duckdb_tools
+
         name = example['name']
         agent_name = example['agent']
         query = example['query']

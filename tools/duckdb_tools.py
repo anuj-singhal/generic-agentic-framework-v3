@@ -7,6 +7,7 @@ Simple, direct tools that return actual data for SQL query generation and execut
 
 from langchain_core.tools import tool
 from typing import Optional
+from contextlib import contextmanager
 import os
 
 from core.tools_base import tool_registry
@@ -21,27 +22,26 @@ except ImportError:
     raise ImportError("`duckdb` not installed. Please install using `pip install duckdb`.")
 
 
-# Global connection - reuse for performance
-_db_connection = None
-
-
-def get_connection() -> duckdb.DuckDBPyConnection:
-    """Get or create a DuckDB connection."""
-    global _db_connection
+@contextmanager
+def get_connection():
+    """Get a DuckDB connection with automatic cleanup."""
+    conn = None
     try:
-        if _db_connection is None:
-            if not os.path.exists(DB_PATH):
-                raise FileNotFoundError(
-                    f"Database '{DB_PATH}' not found. Run 'python init_duckdb.py' first."
-                )
-            _db_connection = duckdb.connect(DB_PATH, read_only=False)
-        # Test connection
-        _db_connection.execute("SELECT 1")
-        return _db_connection
+        if not os.path.exists(DB_PATH):
+            raise FileNotFoundError(
+                f"Database '{DB_PATH}' not found. Run 'python init_duckdb.py' first."
+            )
+        # Use read_only=True to avoid locking issues with concurrent access
+        conn = duckdb.connect(DB_PATH, read_only=True)
+        yield conn
     except Exception as e:
-        # Reset connection on error
-        _db_connection = None
         raise Exception(f"Database connection error: {str(e)}")
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except:
+                pass  # Ignore errors during close
 
 
 def format_results(result) -> str:
@@ -78,42 +78,42 @@ def get_database_schema() -> str:
         Complete schema with table structures and sample data
     """
     try:
-        conn = get_connection()
-        all_tables = ["CLIENTS", "PORTFOLIOS", "ASSETS", "TRANSACTIONS", "HOLDINGS"]
+        with get_connection() as conn:
+            all_tables = ["CLIENTS", "PORTFOLIOS", "ASSETS", "TRANSACTIONS", "HOLDINGS"]
 
-        schema_info = []
-        schema_info.append("WEALTH MANAGEMENT DATABASE SCHEMA")
-        schema_info.append("="*70)
-        schema_info.append("\nTABLES OVERVIEW:")
-        schema_info.append("- CLIENTS: Client profiles (10 records)")
-        schema_info.append("- PORTFOLIOS: Investment accounts (15 records)")
-        schema_info.append("- ASSETS: Tradable instruments (35 records)")
-        schema_info.append("- TRANSACTIONS: Trade history (1,200 records)")
-        schema_info.append("- HOLDINGS: Current positions (305 records)")
-
-        schema_info.append("\nRELATIONSHIPS:")
-        schema_info.append("- PORTFOLIOS.CLIENT_ID -> CLIENTS.CLIENT_ID")
-        schema_info.append("- TRANSACTIONS.PORTFOLIO_ID -> PORTFOLIOS.PORTFOLIO_ID")
-        schema_info.append("- TRANSACTIONS.ASSET_ID -> ASSETS.ASSET_ID")
-        schema_info.append("- HOLDINGS.PORTFOLIO_ID -> PORTFOLIOS.PORTFOLIO_ID")
-        schema_info.append("- HOLDINGS.ASSET_ID -> ASSETS.ASSET_ID")
-
-        for table in all_tables:
-            schema_info.append(f"\n{'='*70}")
-            schema_info.append(f"TABLE: {table}")
+            schema_info = []
+            schema_info.append("WEALTH MANAGEMENT DATABASE SCHEMA")
             schema_info.append("="*70)
+            schema_info.append("\nTABLES OVERVIEW:")
+            schema_info.append("- CLIENTS: Client profiles (10 records)")
+            schema_info.append("- PORTFOLIOS: Investment accounts (15 records)")
+            schema_info.append("- ASSETS: Tradable instruments (35 records)")
+            schema_info.append("- TRANSACTIONS: Trade history (1,200 records)")
+            schema_info.append("- HOLDINGS: Current positions (305 records)")
 
-            # Get schema
-            desc_result = conn.execute(f"DESCRIBE {table};")
-            schema_info.append("\nCOLUMNS:")
-            schema_info.append(format_results(desc_result))
+            schema_info.append("\nRELATIONSHIPS:")
+            schema_info.append("- PORTFOLIOS.CLIENT_ID -> CLIENTS.CLIENT_ID")
+            schema_info.append("- TRANSACTIONS.PORTFOLIO_ID -> PORTFOLIOS.PORTFOLIO_ID")
+            schema_info.append("- TRANSACTIONS.ASSET_ID -> ASSETS.ASSET_ID")
+            schema_info.append("- HOLDINGS.PORTFOLIO_ID -> PORTFOLIOS.PORTFOLIO_ID")
+            schema_info.append("- HOLDINGS.ASSET_ID -> ASSETS.ASSET_ID")
 
-            # Get sample data
-            sample_result = conn.execute(f"SELECT * FROM {table} LIMIT 3;")
-            schema_info.append("\nSAMPLE DATA (3 rows):")
-            schema_info.append(format_results(sample_result))
+            for table in all_tables:
+                schema_info.append(f"\n{'='*70}")
+                schema_info.append(f"TABLE: {table}")
+                schema_info.append("="*70)
 
-        return "\n".join(schema_info)
+                # Get schema
+                desc_result = conn.execute(f"DESCRIBE {table};")
+                schema_info.append("\nCOLUMNS:")
+                schema_info.append(format_results(desc_result))
+
+                # Get sample data
+                sample_result = conn.execute(f"SELECT * FROM {table} LIMIT 3;")
+                schema_info.append("\nSAMPLE DATA (3 rows):")
+                schema_info.append(format_results(sample_result))
+
+            return "\n".join(schema_info)
 
     except Exception as e:
         return f"Error retrieving schema: {str(e)}"
@@ -132,26 +132,25 @@ def run_sql_query(sql_query: str) -> str:
         Query results in CSV format, or error message if query fails
     """
     try:
-        conn = get_connection()
+        with get_connection() as conn:
+            # Clean query - remove markdown formatting and backticks
+            clean_sql = sql_query.strip()
+            clean_sql = clean_sql.replace("```sql", "").replace("```", "").replace("`", "").strip()
 
-        # Clean query - remove markdown formatting and backticks
-        clean_sql = sql_query.strip()
-        clean_sql = clean_sql.replace("```sql", "").replace("```", "").replace("`", "").strip()
+            # Take only the first statement if multiple
+            if ";" in clean_sql:
+                clean_sql = clean_sql.split(";")[0].strip()
 
-        # Take only the first statement if multiple
-        if ";" in clean_sql:
-            clean_sql = clean_sql.split(";")[0].strip()
+            if not clean_sql:
+                return "Error: Empty SQL query provided"
 
-        if not clean_sql:
-            return "Error: Empty SQL query provided"
+            # Execute query
+            result = conn.execute(clean_sql)
 
-        # Execute query
-        result = conn.execute(clean_sql)
+            if result is None:
+                return "Query executed successfully. No output."
 
-        if result is None:
-            return "Query executed successfully. No output."
-
-        return format_results(result)
+            return format_results(result)
 
     except duckdb.ProgrammingError as e:
         return f"SQL Syntax Error: {str(e)}\n\nPlease check your SQL and try again."
@@ -170,9 +169,9 @@ def show_tables() -> str:
         List of table names
     """
     try:
-        conn = get_connection()
-        result = conn.execute("SHOW TABLES;")
-        return format_results(result)
+        with get_connection() as conn:
+            result = conn.execute("SHOW TABLES;")
+            return format_results(result)
     except Exception as e:
         return f"Error: {str(e)}"
 
@@ -189,9 +188,9 @@ def describe_table(table_name: str) -> str:
         Table schema showing column names, types, and constraints
     """
     try:
-        conn = get_connection()
-        result = conn.execute(f"DESCRIBE {table_name};")
-        return format_results(result)
+        with get_connection() as conn:
+            result = conn.execute(f"DESCRIBE {table_name};")
+            return format_results(result)
     except Exception as e:
         return f"Error: {str(e)}"
 
@@ -209,9 +208,9 @@ def get_sample_data(table_name: str, limit: int = 5) -> str:
         Sample data from the table
     """
     try:
-        conn = get_connection()
-        result = conn.execute(f"SELECT * FROM {table_name} LIMIT {limit};")
-        return format_results(result)
+        with get_connection() as conn:
+            result = conn.execute(f"SELECT * FROM {table_name} LIMIT {limit};")
+            return format_results(result)
     except Exception as e:
         return f"Error: {str(e)}"
 
@@ -229,20 +228,19 @@ def validate_sql(sql_query: str) -> str:
         "VALID" if the query is syntactically correct, or error message if not
     """
     try:
-        conn = get_connection()
+        with get_connection() as conn:
+            # Clean query
+            clean_sql = sql_query.strip().replace("```sql", "").replace("```", "").replace("`", "").strip()
 
-        # Clean query
-        clean_sql = sql_query.strip().replace("```sql", "").replace("```", "").replace("`", "").strip()
+            if ";" in clean_sql:
+                clean_sql = clean_sql.split(";")[0].strip()
 
-        if ";" in clean_sql:
-            clean_sql = clean_sql.split(";")[0].strip()
+            if not clean_sql:
+                return "ERROR: Empty query"
 
-        if not clean_sql:
-            return "ERROR: Empty query"
-
-        # Use EXPLAIN to validate without executing
-        conn.execute(f"EXPLAIN {clean_sql}")
-        return "VALID: SQL syntax is correct and all tables/columns exist."
+            # Use EXPLAIN to validate without executing
+            conn.execute(f"EXPLAIN {clean_sql}")
+            return "VALID: SQL syntax is correct and all tables/columns exist."
 
     except duckdb.ProgrammingError as e:
         return f"INVALID: Syntax Error - {str(e)}"
@@ -264,21 +262,20 @@ def get_table_stats(table_name: str) -> str:
         Statistical summary of the table
     """
     try:
-        conn = get_connection()
+        with get_connection() as conn:
+            # Get row count
+            count_result = conn.execute(f"SELECT COUNT(*) as row_count FROM {table_name};")
+            stats = [format_results(count_result)]
 
-        # Get row count
-        count_result = conn.execute(f"SELECT COUNT(*) as row_count FROM {table_name};")
-        stats = [format_results(count_result)]
+            # Get summary stats
+            try:
+                summary_result = conn.execute(f"SUMMARIZE {table_name};")
+                stats.append("\nDETAILED STATISTICS:")
+                stats.append(format_results(summary_result))
+            except:
+                pass  # SUMMARIZE might not work on all table types
 
-        # Get summary stats
-        try:
-            summary_result = conn.execute(f"SUMMARIZE {table_name};")
-            stats.append("\nDETAILED STATISTICS:")
-            stats.append(format_results(summary_result))
-        except:
-            pass  # SUMMARIZE might not work on all table types
-
-        return "\n".join(stats)
+            return "\n".join(stats)
     except Exception as e:
         return f"Error: {str(e)}"
 

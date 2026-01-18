@@ -62,27 +62,29 @@ class ReActOrchestrator:
     The orchestration layer that manages the ReAct loop.
     Uses LangGraph for state management and tool execution.
     """
-    
+
     def __init__(
         self,
         tools: List,
         config: Optional[FrameworkConfig] = None,
-        callbacks: Optional[List] = None
+        callbacks: Optional[List] = None,
+        system_prompt: Optional[str] = None
     ):
         self.config = config or get_config()
         self.tools = tools
         self.callbacks = callbacks or []
-        
+        self.custom_system_prompt = system_prompt
+
         # Initialize the LLM (The Brain)
         self.llm = ChatOpenAI(
             model=self.config.model.model_name,
             temperature=self.config.model.temperature,
             api_key=self.config.model.api_key
         )
-        
+
         # Bind tools to the LLM
         self.llm_with_tools = self.llm.bind_tools(tools) if tools else self.llm
-        
+
         # Build the graph
         self.graph = self._build_graph()
     
@@ -133,22 +135,28 @@ class ReActOrchestrator:
         """
         messages = state["messages"]
         iteration = state.get("iteration_count", 0)
-        
+
         # Add system prompt if this is the first iteration
         if iteration == 0:
-            system_prompt = REACT_SYSTEM_PROMPT.format(
-                tool_descriptions=self._get_tool_descriptions()
-            )
+            # Use custom system prompt if provided, otherwise use default
+            if self.custom_system_prompt:
+                # Combine custom prompt with tool descriptions
+                tool_info = f"\n\nAvailable Tools:\n{self._get_tool_descriptions()}"
+                system_prompt = self.custom_system_prompt + tool_info
+            else:
+                system_prompt = REACT_SYSTEM_PROMPT.format(
+                    tool_descriptions=self._get_tool_descriptions()
+                )
             messages = [SystemMessage(content=system_prompt)] + list(messages)
-        
+
         # Call the LLM
         response = self.llm_with_tools.invoke(messages)
-        
+
         # Update state
         new_thoughts = list(state.get("thoughts", []))
         content_preview = response.content[:200] if response.content else "[Tool Call]"
         new_thoughts.append(f"Iteration {iteration + 1}: {content_preview}...")
-        
+
         return {
             "messages": [response],
             "thoughts": new_thoughts,

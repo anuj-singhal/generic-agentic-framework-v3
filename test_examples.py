@@ -819,21 +819,21 @@ WEALTH_SIMPLE_EXAMPLES = [
         "name": "List All Clients",
         "agent": "data_agent",
         "query": "Show me all clients in the database",
-        "expected_tools": ["get_relevant_schema", "analyze_query_complexity", "generate_sql", "validate_sql", "execute_sql"],
+        "expected_tools": ["get_database_schema", "run_sql_query"],
         "description": "Simple query to list all clients"
     },
     {
         "name": "Active Portfolios",
         "agent": "data_agent",
         "query": "Show me all active portfolios",
-        "expected_tools": ["get_relevant_schema", "generate_sql", "validate_sql", "execute_sql"],
+        "expected_tools": ["get_database_schema", "run_sql_query"],
         "description": "Filter portfolios by active status"
     },
     {
         "name": "Client Risk Profiles",
         "agent": "data_agent",
         "query": "What are the different risk profiles of our clients?",
-        "expected_tools": ["get_relevant_schema", "generate_sql", "execute_sql"],
+        "expected_tools": ["get_database_schema", "run_sql_query"],
         "description": "Query distinct risk profiles"
     },
     {
@@ -857,42 +857,42 @@ WEALTH_MEDIUM_EXAMPLES = [
         "name": "Clients with Portfolios",
         "agent": "data_agent",
         "query": "Show me all clients along with their portfolio names and currencies",
-        "expected_tools": ["get_relevant_schema", "analyze_query_complexity", "generate_sql", "validate_sql", "execute_sql"],
+        "expected_tools": ["get_database_schema", "run_sql_query"],
         "description": "JOIN clients and portfolios tables"
     },
     {
         "name": "Portfolio Holdings Summary",
         "agent": "data_agent",
         "query": "For each portfolio, show me the total number of different assets they hold",
-        "expected_tools": ["get_relevant_schema", "analyze_query_complexity", "generate_sql", "validate_sql", "execute_sql"],
+        "expected_tools": ["get_database_schema", "run_sql_query"],
         "description": "Aggregate holdings by portfolio with COUNT"
     },
     {
         "name": "Recent Transactions",
         "agent": "data_agent",
         "query": "Show me the 10 most recent transactions with client names, portfolio names, and asset symbols",
-        "expected_tools": ["get_relevant_schema", "generate_sql", "validate_sql", "execute_sql"],
+        "expected_tools": ["get_database_schema", "run_sql_query"],
         "description": "Multi-table JOIN with ORDER BY and LIMIT"
     },
     {
         "name": "Assets by Type",
         "agent": "data_agent",
         "query": "How many assets do we have of each type (Equity, ETF, Crypto)?",
-        "expected_tools": ["get_relevant_schema", "generate_sql", "execute_sql"],
+        "expected_tools": ["get_database_schema", "run_sql_query"],
         "description": "GROUP BY with COUNT aggregation"
     },
     {
         "name": "Client Transaction Activity",
         "agent": "data_agent",
         "query": "Which clients have made transactions, and how many transactions has each client made?",
-        "expected_tools": ["get_relevant_schema", "analyze_query_complexity", "generate_sql", "validate_sql", "execute_sql"],
+        "expected_tools": ["get_database_schema", "run_sql_query"],
         "description": "JOIN with aggregation and GROUP BY"
     },
     {
         "name": "Holdings with Asset Details",
         "agent": "data_agent",
         "query": "Show current holdings with asset symbols, names, quantities, and average cost",
-        "expected_tools": ["get_relevant_schema", "generate_sql", "validate_sql", "execute_sql"],
+        "expected_tools": ["get_database_schema", "run_sql_query"],
         "description": "JOIN holdings with assets table"
     },
 ]
@@ -904,7 +904,7 @@ WEALTH_COMPLEX_EXAMPLES = [
         "query": """Calculate the total value of each portfolio based on current holdings.
 Show client name, portfolio name, base currency, and total portfolio value (quantity * average cost).
 Order by total value descending.""",
-        "expected_tools": ["get_relevant_schema", "analyze_query_complexity", "generate_sql", "validate_sql", "execute_sql", "explain_sql"],
+        "expected_tools": ["get_database_schema", "run_sql_query"],
         "description": "Complex query with CTE, multiple JOINs, and aggregation"
     },
     {
@@ -915,7 +915,7 @@ Order by total value descending.""",
 2. Total number of unique assets across all their portfolios
 3. Number of different asset types (Equity, ETF, Crypto) they hold
 Group by client and order by number of assets descending.""",
-        "expected_tools": ["get_relevant_schema", "analyze_query_complexity", "generate_sql", "validate_sql", "execute_sql"],
+        "expected_tools": ["get_database_schema", "run_sql_query"],
         "description": "Multi-level aggregation with multiple JOINs and CTEs"
     },
     {
@@ -928,7 +928,7 @@ Group by client and order by number of assets descending.""",
 - Total transaction count
 - Most frequently traded asset symbol
 Only include clients with more than 5 transactions. Order by total transactions descending.""",
-        "expected_tools": ["get_relevant_schema", "analyze_query_complexity", "generate_sql", "validate_sql", "execute_sql"],
+        "expected_tools": ["get_database_schema", "run_sql_query"],
         "description": "Complex aggregation with conditional counts and filtering"
     },
     {
@@ -937,7 +937,7 @@ Only include clients with more than 5 transactions. Order by total transactions 
         "query": """For each portfolio, identify the top 3 holdings by total value (quantity * avg_cost).
 Show portfolio name, asset symbol, asset name, quantity, average cost, and total value.
 Use a window function or CTE to rank holdings within each portfolio.""",
-        "expected_tools": ["get_relevant_schema", "analyze_query_complexity", "generate_sql", "validate_sql", "execute_sql"],
+        "expected_tools": ["get_database_schema", "run_sql_query"],
         "description": "Window functions or CTEs with ranking"
     },
     {
@@ -949,7 +949,7 @@ Use a window function or CTE to rank holdings within each portfolio.""",
 3. Number of portfolios managed by clients in each category
 4. Average portfolio value per risk profile
 Include KYC approved clients only. Order by risk profile.""",
-        "expected_tools": ["get_relevant_schema", "analyze_query_complexity", "generate_sql", "validate_sql", "execute_sql"],
+        "expected_tools": ["get_database_schema", "run_sql_query"],
         "description": "Multi-table JOIN with multiple aggregations and filtering"
     },
     {
@@ -963,7 +963,7 @@ For client 'Anuj Singhal':
 - Number of different assets held
 
 Use CTEs to organize the calculation logic.""",
-        "expected_tools": ["get_relevant_schema", "analyze_query_complexity", "generate_sql", "validate_sql", "execute_sql", "explain_sql"],
+        "expected_tools": ["get_database_schema", "run_sql_query"],
         "description": "Complex CTE-based query with percentage calculations"
     },
     {
@@ -974,7 +974,7 @@ Use CTEs to organize the calculation logic.""",
 2. Total value traded by month (sum of quantity * price)
 3. Buy vs Sell ratio for each month
 Show results for the most recent 6 months of data.""",
-        "expected_tools": ["get_relevant_schema", "analyze_query_complexity", "generate_sql", "validate_sql", "execute_sql"],
+        "expected_tools": ["get_database_schema", "run_sql_query"],
         "description": "Time-based analysis with date functions and aggregations"
     },
     {
@@ -989,7 +989,7 @@ Show results for the most recent 6 months of data.""",
 - Most frequently held asset type
 
 Order by total portfolio value descending. Use multiple CTEs to organize the logic.""",
-        "expected_tools": ["get_relevant_schema", "analyze_query_complexity", "generate_sql", "validate_sql", "execute_sql", "explain_sql"],
+        "expected_tools": ["get_database_schema", "run_sql_query"],
         "description": "Master query with multiple CTEs combining all aspects"
     },
 ]
