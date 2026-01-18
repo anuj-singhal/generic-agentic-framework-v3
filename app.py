@@ -534,8 +534,8 @@ def render_schema_modal():
     return True
 
 
-def run_agent(mission: str) -> Dict[str, Any]:
-    """Run the selected agent with the given mission."""
+def create_agent_orchestrator():
+    """Create and return the agent orchestrator."""
     # Create config
     config = FrameworkConfig(
         model=ModelConfig(
@@ -545,15 +545,98 @@ def run_agent(mission: str) -> Dict[str, Any]:
         ),
         max_iterations=st.session_state.max_iterations
     )
-    
+
     # Create the agent
     orchestrator = create_agent(st.session_state.current_agent, config)
-    
+    return orchestrator
+
+
+def render_streaming_trace_item(msg, container):
+    """Render a single trace item during streaming."""
+    msg_type = type(msg).__name__
+
+    if msg_type == "HumanMessage":
+        container.markdown(f"""
+        <div class="thought-box">
+            <strong>📝 Mission:</strong><br>
+            {msg.content[:500]}{'...' if len(msg.content) > 500 else ''}
+        </div>
+        """, unsafe_allow_html=True)
+
+    elif msg_type == "AIMessage":
+        content = msg.content if msg.content else ""
+
+        # Check for tool calls
+        if hasattr(msg, "tool_calls") and msg.tool_calls:
+            for tool_call in msg.tool_calls:
+                container.markdown(f"""
+                <div class="action-box">
+                    <strong>🛠️ Action:</strong> {tool_call['name']}<br>
+                    <strong>Input:</strong> <code>{json.dumps(tool_call['args'], indent=2)}</code>
+                </div>
+                """, unsafe_allow_html=True)
+        elif content:
+            container.markdown(f"""
+            <div class="thought-box">
+                <strong>💭 Thought/Response:</strong><br>
+                {content[:500]}{'...' if len(content) > 500 else ''}
+            </div>
+            """, unsafe_allow_html=True)
+
+    elif msg_type == "ToolMessage":
+        container.markdown(f"""
+        <div class="observation-box">
+            <strong>👁️ Observation:</strong><br>
+            {msg.content[:500]}{'...' if len(msg.content) > 500 else ''}
+        </div>
+        """, unsafe_allow_html=True)
+
+
+def run_agent_with_streaming(mission: str, trace_container, answer_placeholder):
+    """Run the agent with real-time streaming of trace."""
+    orchestrator = create_agent_orchestrator()
+
     if orchestrator is None:
         return {"error": f"Agent '{st.session_state.current_agent}' not found"}
-    
-    # Run the agent
-    result = orchestrator.run(mission)
+
+    # Track messages we've already displayed
+    displayed_message_count = 0
+    final_state = None
+    all_messages = []
+
+    # Stream the execution
+    for state_update in orchestrator.stream(mission):
+        # state_update is a dict with node name as key
+        for node_name, node_state in state_update.items():
+            if node_name == "__end__":
+                continue
+
+            # Get messages from this update
+            messages = node_state.get("messages", [])
+
+            # Display new messages
+            for msg in messages:
+                all_messages.append(msg)
+                render_streaming_trace_item(msg, trace_container)
+                displayed_message_count += 1
+
+            # Update the final state
+            final_state = node_state
+
+    # Build the complete result
+    result = {
+        "messages": all_messages,
+        "mission": mission,
+        "thoughts": final_state.get("thoughts", []) if final_state else [],
+        "observations": final_state.get("observations", []) if final_state else [],
+        "actions": final_state.get("actions", []) if final_state else [],
+        "iteration_count": final_state.get("iteration_count", 0) if final_state else 0,
+        "is_complete": True,
+        "final_answer": final_state.get("final_answer") if final_state else None,
+        "error": final_state.get("error") if final_state else None,
+        "tool_calls_made": final_state.get("tool_calls_made", 0) if final_state else 0
+    }
+
     return result
 
 
@@ -634,30 +717,44 @@ def main():
     if prompt := st.chat_input("Enter your task or question..."):
         # Add user message to history
         st.session_state.messages.append({"role": "user", "content": prompt})
-        
+
         # Display user message
         with st.chat_message("user"):
             st.markdown(prompt)
-        
-        # Run agent and display response
+
+        # Run agent with real-time streaming
         with st.chat_message("assistant"):
-            with st.spinner(f"🔄 {st.session_state.current_agent.replace('_', ' ').title()} is thinking..."):
-                result = run_agent(prompt)
-                final_answer = get_final_answer(result)
-            
-            # Display the final answer
-            st.markdown(final_answer)
-            
-            # Show execution trace
-            render_react_trace(result)
-            
+            # Header showing agent is working
+            status_placeholder = st.empty()
+            status_placeholder.markdown(f"**🔄 {st.session_state.current_agent.replace('_', ' ').title()} is working...**")
+
+            # Create expander for real-time trace - starts expanded
+            with st.expander("🔍 ReAct Execution Trace (Live)", expanded=True):
+                trace_container = st.container()
+
+            # Placeholder for the final answer
+            answer_placeholder = st.empty()
+
+            # Run with streaming
+            result = run_agent_with_streaming(prompt, trace_container, answer_placeholder)
+            final_answer = get_final_answer(result)
+
+            # Clear the status and show final answer
+            status_placeholder.empty()
+            answer_placeholder.markdown(f"""
+            <div class="final-answer">
+                <strong>✅ Final Answer:</strong><br><br>
+                {final_answer}
+            </div>
+            """, unsafe_allow_html=True)
+
             # Store in history
             st.session_state.messages.append({
                 "role": "assistant",
                 "content": final_answer,
                 "trace": result
             })
-            
+
             # Store execution history
             st.session_state.execution_history.append({
                 "timestamp": datetime.now().isoformat(),
