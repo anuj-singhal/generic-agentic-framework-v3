@@ -18,6 +18,12 @@ from core.tools_base import tool_registry
 from tools.example_tools import get_all_tools
 from agents.agent_definitions import get_available_agents, create_agent, AgentFactory
 
+# DuckDB imports for database explorer
+import duckdb
+import pandas as pd
+
+DB_PATH = "agent_ddb.db"
+
 
 # Page configuration
 st.set_page_config(
@@ -34,6 +40,155 @@ st.markdown("""
     .stApp {
         max-width: 100%;
     }
+    /* Sidebar styling - Light Blue Theme */
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #e3f2fd 0%, #bbdefb 100%);
+    }
+    [data-testid="stSidebar"] > div:first-child {
+        padding-top: 0.5rem !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p {
+        color: #1565c0;
+    }
+    [data-testid="stSidebar"] .stSelectbox label,
+    [data-testid="stSidebar"] .stTextInput label,
+    [data-testid="stSidebar"] .stSlider label {
+        color: #1565c0 !important;
+        font-size: 0.85rem !important;
+    }
+    /* Compact sidebar elements with consistent font */
+    [data-testid="stSidebar"] .stSelectbox,
+    [data-testid="stSidebar"] .stTextInput {
+        margin-bottom: 0.5rem !important;
+    }
+    [data-testid="stSidebar"] .stSelectbox label,
+    [data-testid="stSidebar"] .stSelectbox div[data-baseweb="select"] span,
+    [data-testid="stSidebar"] .stSelectbox input,
+    [data-testid="stSidebar"] .stTextInput label,
+    [data-testid="stSidebar"] .stTextInput input,
+    [data-testid="stSidebar"] .stButton button,
+    [data-testid="stSidebar"] .stButton button p {
+        font-size: 0.75rem !important;
+    }
+    [data-testid="stSidebar"] .stSlider {
+        padding-top: 0 !important;
+        margin-bottom: 0.3rem !important;
+    }
+    [data-testid="stSidebar"] .stSlider label {
+        font-size: 0.75rem !important;
+    }
+    /* Primary button - Green color with white text */
+    [data-testid="stSidebar"] .stButton button[kind="primary"] {
+        background-color: #2e7d32 !important;
+        border-color: #2e7d32 !important;
+        color: #ffffff !important;
+    }
+    [data-testid="stSidebar"] .stButton button[kind="primary"]:hover {
+        background-color: #1b5e20 !important;
+        border-color: #1b5e20 !important;
+        color: #ffffff !important;
+    }
+    [data-testid="stSidebar"] .stButton button[kind="primary"] p {
+        color: #ffffff !important;
+    }
+    /* Section headers */
+    .sidebar-header {
+        color: #0d47a1;
+        font-size: 0.9rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin: 0.8rem 0 0.4rem 0;
+        padding-bottom: 0.3rem;
+        border-bottom: 2px solid #1976d2;
+    }
+    /* Database card */
+    .db-card {
+        background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%);
+        border: 1px solid #1565c0;
+        border-radius: 8px;
+        padding: 8px 12px;
+        margin: 8px 0;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .db-card-title {
+        color: #ffffff;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    .db-card-info {
+        color: #e3f2fd;
+        font-size: 0.7rem;
+    }
+    /* Agent info box */
+    .agent-info {
+        background: rgba(25, 118, 210, 0.1);
+        border-left: 3px solid #1976d2;
+        padding: 8px 10px;
+        border-radius: 0 6px 6px 0;
+        font-size: 0.8rem;
+        color: #1565c0;
+        margin: 5px 0;
+    }
+    /* Tool expander styling - Compact */
+    [data-testid="stSidebar"] [data-testid="stExpander"] {
+        background: #ffffff !important;
+        border: 1px solid #90caf9;
+        border-radius: 4px;
+        margin: 2px 0 !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stExpander"] summary {
+        color: #1565c0 !important;
+        font-weight: 500;
+        font-size: 0.75rem !important;
+        padding: 4px 8px !important;
+        min-height: unset !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stExpander"] summary p {
+        font-size: 0.75rem !important;
+    }
+    /* Expander content - white background with black text */
+    [data-testid="stSidebar"] [data-testid="stExpander"] details {
+        background: #ffffff !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stMarkdownContainer"],
+    [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stMarkdownContainer"] p,
+    [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stText"],
+    [data-testid="stSidebar"] [data-testid="stExpander"] p,
+    [data-testid="stSidebar"] [data-testid="stExpander"] span,
+    [data-testid="stSidebar"] [data-testid="stExpander"] div[data-testid="stMarkdownContainer"] {
+        color: #000000 !important;
+        background-color: #ffffff !important;
+    }
+    /* Tools container - scrollable */
+    .tools-container {
+        max-height: 200px;
+        overflow-y: auto;
+        padding-right: 5px;
+    }
+    .tools-container::-webkit-scrollbar {
+        width: 4px;
+    }
+    .tools-container::-webkit-scrollbar-track {
+        background: #e3f2fd;
+        border-radius: 2px;
+    }
+    .tools-container::-webkit-scrollbar-thumb {
+        background: #90caf9;
+        border-radius: 2px;
+    }
+    /* Compact tool description */
+    .tool-desc {
+        background-color: #ffffff;
+        color: #000000;
+        padding: 4px 6px;
+        font-size: 0.7rem;
+        line-height: 1.3;
+    }
+    /* Main content boxes */
     .thought-box {
         background-color: #f0f7ff;
         border-left: 4px solid #1E88E5;
@@ -62,23 +217,69 @@ st.markdown("""
         margin: 15px 0;
         border-radius: 8px;
     }
-    .tool-card {
-        background-color: #fafafa;
-        border: 1px solid #e0e0e0;
-        padding: 10px;
-        margin: 5px 0;
-        border-radius: 8px;
-    }
-    .agent-card {
-        background-color: #fff;
-        border: 1px solid #e0e0e0;
-        padding: 15px;
-        margin: 10px 0;
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
 </style>
 """, unsafe_allow_html=True)
+
+
+def get_duckdb_tables():
+    """Get list of tables from DuckDB database."""
+    if not os.path.exists(DB_PATH):
+        return []
+    try:
+        conn = duckdb.connect(DB_PATH, read_only=True)
+        result = conn.execute("SHOW TABLES;").fetchall()
+        conn.close()
+        return [row[0] for row in result]
+    except Exception as e:
+        return []
+
+
+def get_table_schema(table_name: str):
+    """Get schema for a specific table."""
+    if not os.path.exists(DB_PATH):
+        return None
+    try:
+        conn = duckdb.connect(DB_PATH, read_only=True)
+        result = conn.execute(f"DESCRIBE {table_name};").fetchall()
+        columns = conn.execute(f"DESCRIBE {table_name};").description
+        conn.close()
+        return {
+            "columns": [col[0] for col in columns],
+            "data": result
+        }
+    except Exception as e:
+        return None
+
+
+def get_sample_data(table_name: str, limit: int = 10):
+    """Get sample data from a table."""
+    if not os.path.exists(DB_PATH):
+        return None
+    try:
+        conn = duckdb.connect(DB_PATH, read_only=True)
+        result = conn.execute(f"SELECT * FROM {table_name} LIMIT {limit};")
+        columns = [col[0] for col in result.description]
+        data = result.fetchall()
+        conn.close()
+        return {
+            "columns": columns,
+            "data": data
+        }
+    except Exception as e:
+        return None
+
+
+def get_table_row_count(table_name: str):
+    """Get row count for a table."""
+    if not os.path.exists(DB_PATH):
+        return 0
+    try:
+        conn = duckdb.connect(DB_PATH, read_only=True)
+        result = conn.execute(f"SELECT COUNT(*) FROM {table_name};").fetchone()
+        conn.close()
+        return result[0] if result else 0
+    except Exception as e:
+        return 0
 
 
 def initialize_session_state():
@@ -97,58 +298,94 @@ def initialize_session_state():
         st.session_state.temperature = 0.7
     if "max_iterations" not in st.session_state:
         st.session_state.max_iterations = 10
+    if "show_schema_modal" not in st.session_state:
+        st.session_state.show_schema_modal = False
+    if "selected_table" not in st.session_state:
+        st.session_state.selected_table = None
 
 
 def render_sidebar():
     """Render the sidebar with configuration options."""
     with st.sidebar:
-        st.title("⚙️ Configuration")
-        
+        # App title - compact
+        st.markdown("### 🤖 AI Agent Console")
+
+        # ═══════════════════════════════════════════════════════════════
+        # DATABASE EXPLORER (Top Priority)
+        # ═══════════════════════════════════════════════════════════════
+        st.markdown('<p class="sidebar-header">🗄️ Database Explorer</p>', unsafe_allow_html=True)
+
+        if os.path.exists(DB_PATH):
+            tables = get_duckdb_tables()
+            if tables:
+                # Compact database info - inline layout
+                total_tables = len(tables)
+                st.markdown(f"<div class='db-card'><span class='db-card-title'>📁 {DB_PATH}</span><span class='db-card-info'>{total_tables} tables</span></div>", unsafe_allow_html=True)
+
+                # Table selection - compact
+                selected_table = st.selectbox(
+                    "Table",
+                    tables,
+                    key="table_selector",
+                    format_func=lambda x: f"{x} ({get_table_row_count(x):,} rows)"
+                )
+
+                # Show Schema button
+                if st.button("📋 View Schema & Data", use_container_width=True, type="primary"):
+                    st.session_state.show_schema_modal = True
+                    st.session_state.selected_table = selected_table
+                    st.rerun()
+            else:
+                st.warning("No tables found.")
+        else:
+            st.error("Database not found")
+            st.caption("Run: `python init_duckdb.py`")
+
+        # ═══════════════════════════════════════════════════════════════
+        # SETTINGS (API Key)
+        # ═══════════════════════════════════════════════════════════════
+        st.markdown('<p class="sidebar-header">🔑 Settings</p>', unsafe_allow_html=True)
+
         # API Key
-        st.subheader("🔑 API Settings")
         api_key = st.text_input(
             "OpenAI API Key",
             type="password",
             value=st.session_state.api_key,
-            help="Enter your OpenAI API key"
+            placeholder="Enter your OpenAI API key...",
+            help="Required to run agents"
         )
         if api_key != st.session_state.api_key:
             st.session_state.api_key = api_key
             os.environ["OPENAI_API_KEY"] = api_key
-        
-        # Model Settings
-        st.subheader("🧠 Model Settings")
+
+        # ═══════════════════════════════════════════════════════════════
+        # MODEL CONFIG (Expanded)
+        # ═══════════════════════════════════════════════════════════════
+        st.markdown('<p class="sidebar-header">🧠 Model Config</p>', unsafe_allow_html=True)
+
         model_name = st.selectbox(
             "Model",
             ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"],
             index=0
         )
         st.session_state.model_name = model_name
-        
-        temperature = st.slider(
-            "Temperature",
-            min_value=0.0,
-            max_value=1.0,
-            value=st.session_state.temperature,
-            step=0.1,
-            help="Higher values make output more random"
-        )
-        st.session_state.temperature = temperature
-        
-        max_iterations = st.slider(
-            "Max Iterations",
-            min_value=1,
-            max_value=20,
-            value=st.session_state.max_iterations,
-            help="Maximum ReAct loop iterations"
-        )
-        st.session_state.max_iterations = max_iterations
-        
-        # Agent Selection
-        st.subheader("🤖 Agent Selection")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            temperature = st.slider("Temperature", 0.0, 1.0, st.session_state.temperature, 0.1)
+            st.session_state.temperature = temperature
+        with col2:
+            max_iterations = st.slider("Max Iters", 1, 20, st.session_state.max_iterations)
+            st.session_state.max_iterations = max_iterations
+
+        # ═══════════════════════════════════════════════════════════════
+        # AGENT SELECTION
+        # ═══════════════════════════════════════════════════════════════
+        st.markdown('<p class="sidebar-header">🤖 Agent Selection</p>', unsafe_allow_html=True)
+
         agents = get_available_agents()
         agent_names = list(agents.keys())
-        
+
         selected_agent = st.selectbox(
             "Select Agent",
             agent_names,
@@ -156,23 +393,30 @@ def render_sidebar():
             format_func=lambda x: f"{x.replace('_', ' ').title()}"
         )
         st.session_state.current_agent = selected_agent
-        
-        # Show agent description
+
+        # Agent description
         if selected_agent in agents:
-            st.info(agents[selected_agent])
-        
-        # Show agent's available tools
+            st.markdown(f"<div class='agent-info'>{agents[selected_agent]}</div>", unsafe_allow_html=True)
+
+        # ═══════════════════════════════════════════════════════════════
+        # AGENT TOOLS (Compact & Scrollable)
+        # ═══════════════════════════════════════════════════════════════
         agent_def = AgentFactory.get_agent_definition(selected_agent)
         if agent_def:
-            st.subheader("🔧 Agent Tools")
             tools = agent_def.get_tools()
-            for tool in tools:
-                with st.expander(f"📌 {tool.name}"):
-                    st.write(tool.description)
-        
-        # Clear history button
-        st.divider()
-        if st.button("🗑️ Clear History", use_container_width=True):
+            st.markdown(f'<p class="sidebar-header">🔧 Tools ({len(tools)})</p>', unsafe_allow_html=True)
+
+            # Create scrollable container
+            with st.container(height=300):
+                for tool in tools:
+                    with st.expander(f"📌 {tool.name}", expanded=False):
+                        st.markdown(f"<div class='tool-desc'>{tool.description}</div>", unsafe_allow_html=True)
+
+        # ═══════════════════════════════════════════════════════════════
+        # ACTIONS
+        # ═══════════════════════════════════════════════════════════════
+        st.markdown("---")
+        if st.button("🗑️ Clear Chat", use_container_width=True):
             st.session_state.messages = []
             st.session_state.execution_history = []
             st.rerun()
@@ -223,6 +467,73 @@ def render_react_trace(execution_data: Dict[str, Any]):
                 """, unsafe_allow_html=True)
 
 
+def render_schema_modal():
+    """Render the schema and sample data modal as an overlay."""
+    if not st.session_state.show_schema_modal or not st.session_state.selected_table:
+        return False
+
+    table_name = st.session_state.selected_table
+
+    # Get data
+    schema = get_table_schema(table_name)
+    sample = get_sample_data(table_name, 10)
+    row_count = get_table_row_count(table_name)
+
+    # Create modal container
+    modal = st.container()
+
+    with modal:
+        # Modal header with close button
+        col1, col2 = st.columns([6, 1])
+        with col1:
+            st.markdown(f"## 📊 Table: {table_name}")
+        with col2:
+            if st.button("✕ Close", key="close_modal"):
+                st.session_state.show_schema_modal = False
+                st.rerun()
+
+        st.markdown(f"**Total Rows:** {row_count:,}")
+        st.markdown("---")
+
+        # Schema Section
+        st.markdown("### 📋 Schema")
+
+        if schema:
+            schema_df_data = []
+            for row in schema['data']:
+                schema_df_data.append({
+                    "Column": row[0],
+                    "Type": row[1],
+                    "Null": row[2] if len(row) > 2 else "YES",
+                    "Key": row[3] if len(row) > 3 else "",
+                    "Default": row[4] if len(row) > 4 else ""
+                })
+
+            schema_df = pd.DataFrame(schema_df_data)
+            st.dataframe(schema_df, use_container_width=True, hide_index=True)
+        else:
+            st.error("Could not retrieve schema.")
+
+        # Sample Data Section
+        st.markdown("---")
+        st.markdown("### 📝 Sample Data (10 rows)")
+
+        if sample and sample['data']:
+            sample_df = pd.DataFrame(sample['data'], columns=sample['columns'])
+            st.dataframe(sample_df, use_container_width=True, hide_index=True)
+        else:
+            st.warning("No sample data available.")
+
+        st.markdown("---")
+
+        # Close button at bottom
+        if st.button("Close", type="primary", use_container_width=True, key="close_modal_bottom"):
+            st.session_state.show_schema_modal = False
+            st.rerun()
+
+    return True
+
+
 def run_agent(mission: str) -> Dict[str, Any]:
     """Run the selected agent with the given mission."""
     # Create config
@@ -264,14 +575,18 @@ def get_final_answer(result: Dict[str, Any]) -> str:
 def main():
     """Main application entry point."""
     initialize_session_state()
-    
+
     # Render sidebar
     render_sidebar()
-    
+
     # Main content area
     st.title("🤖 Agentic AI Framework")
     st.markdown("*An intelligent assistant operating in ReAct mode*")
-    
+
+    # Render schema modal if triggered (this will take over the main area)
+    if render_schema_modal():
+        return  # Stop rendering rest of the page when modal is shown
+
     # Check for API key
     if not st.session_state.api_key:
         st.warning("⚠️ Please enter your OpenAI API key in the sidebar to get started.")
@@ -350,94 +665,6 @@ def main():
                 "mission": prompt,
                 "result": result
             })
-    
-    # # Footer with tabs for tools and examples
-    # tab1, tab2 = st.tabs(["📋 Available Tools", "📝 Example Queries"])
-    
-    # with tab1:
-    #     all_tools = get_all_tools()
-    #     cols = st.columns(2)
-    #     for i, tool in enumerate(all_tools):
-    #         with cols[i % 2]:
-    #             st.markdown(f"""
-    #             <div class="tool-card">
-    #                 <strong>🔧 {tool.name}</strong><br>
-    #                 <small>{tool.description[:100]}...</small>
-    #             </div>
-    #             """, unsafe_allow_html=True)
-    
-    # with tab2:
-    #     render_example_queries_inline()
-
-
-def render_example_queries_inline():
-    """Render example queries inline in the main app."""
-    
-    st.markdown("### 🟢 Simple (Single Tool)")
-    simple = [
-        "What is 15% of 850?",
-        "Convert 98.6 Fahrenheit to Celsius",
-        "What is today's date and time?",
-        "Create a high priority task called 'Review report'",
-        "Sort alphabetically: banana, apple, cherry, date",
-    ]
-    cols = st.columns(2)
-    for i, q in enumerate(simple):
-        with cols[i % 2]:
-            st.code(q, language=None)
-    
-    st.markdown("### 🟡 Medium (Multiple Tools)")
-    medium = [
-        "I'm traveling 150 miles. Gas costs $3.50/gallon, car gets 30 mpg. Calculate cost and convert distance to km.",
-        "Create tasks: 'Design' (high), 'Code' (medium), 'Test' (low). Then list all tasks.",
-        "Split a $247.50 bill between 5 friends with 20% tip. How much each?",
-    ]
-    for q in medium:
-        st.code(q, language=None)
-    
-    st.markdown("### 🔴 Complex (Multi-Step)")
-    complex_ex = [
-        """Plan my project:
-1. Get today's date
-2. Calculate end date (90 days from now)
-3. Create tasks: Requirements (high), Development (high), Testing (medium)
-4. List all tasks""",
-        """Investment analysis:
-1. Calculate $50,000 at 7% for 5 years: 50000 * (1.07)^5
-2. Calculate the gain (result - 50000)
-3. Calculate percentage gain
-4. Convert to EUR (multiply by 0.92)""",
-    ]
-    for q in complex_ex:
-        st.code(q, language=None)
-    
-    st.markdown("### 🗄️ SQL / Text-to-SQL")
-    sql_examples = [
-        "What databases are available?",
-        "Show me the schema for the ecommerce database",
-        "Write a SQL query to get all customers from USA in the ecommerce database",
-        "How many orders are in pending status? Use the ecommerce database.",
-        """Using the ecommerce database, write a query to find the top 5 customers by total order value. 
-Show customer name, email, number of orders, and total spent.""",
-        """Explain this SQL: SELECT c.first_name, COUNT(o.order_id) as order_count 
-FROM customers c LEFT JOIN orders o ON c.customer_id = o.customer_id 
-GROUP BY c.first_name ORDER BY order_count DESC""",
-    ]
-    for q in sql_examples:
-        st.code(q, language=None)
-    
-    st.markdown("### 🏷️ Name Matching")
-    name_examples = [
-        '''Load these names for matching:
-["Emirates NBD", "Emirates NBD PJSC", "Emirates NBD Bank", "ENBD",
-"DEWA", "Dubai Electricity and Water", "Dubai Electricity and Water Authority"]''',
-        "Find all names that match 'Emirates NBD Bank' from the loaded list",
-        "Analyze how the name 'Dubai Electricity and Water Authority' will be processed",
-        '''Batch match these canonical names: ["Emirates NBD", "DEWA"]''',
-        "Create a canonical mapping for 'Emirates NBD' showing all variations",
-    ]
-    for q in name_examples:
-        st.code(q, language=None)
 
 
 if __name__ == "__main__":
