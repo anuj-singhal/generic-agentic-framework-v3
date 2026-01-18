@@ -1,0 +1,917 @@
+"""
+Test Examples for the Agentic AI Framework
+==========================================
+
+This file contains a variety of test scenarios ranging from simple to complex,
+demonstrating the ReAct pattern with multiple tools and agents.
+
+Usage:
+    1. Run the Streamlit app: streamlit run app.py
+    2. Copy/paste these examples into the chat
+    3. Or run this file directly: python test_examples.py
+"""
+
+# =============================================================================
+# SIMPLE EXAMPLES (Single tool, straightforward tasks)
+# =============================================================================
+
+SIMPLE_EXAMPLES = [
+    # Math - Calculator
+    {
+        "name": "Basic Calculation",
+        "agent": "math_specialist",
+        "query": "What is 15% of 850?",
+        "expected_tools": ["calculator"],
+        "description": "Simple percentage calculation"
+    },
+    {
+        "name": "Scientific Calculation",
+        "agent": "math_specialist",
+        "query": "Calculate the square root of 144 plus the cube of 5",
+        "expected_tools": ["calculator"],
+        "description": "Mathematical expression with multiple operations"
+    },
+    
+    # Math - Unit Conversion
+    {
+        "name": "Temperature Conversion",
+        "agent": "math_specialist",
+        "query": "Convert 98.6 degrees Fahrenheit to Celsius",
+        "expected_tools": ["unit_converter"],
+        "description": "Simple unit conversion"
+    },
+    {
+        "name": "Distance Conversion",
+        "agent": "math_specialist",
+        "query": "How many kilometers is 26.2 miles?",
+        "expected_tools": ["unit_converter"],
+        "description": "Marathon distance conversion"
+    },
+    
+    # DateTime - Current Time
+    {
+        "name": "Current DateTime",
+        "agent": "general_assistant",
+        "query": "What is today's date and time?",
+        "expected_tools": ["get_current_datetime"],
+        "description": "Get current date and time"
+    },
+    
+    # Text - Analysis
+    {
+        "name": "Text Statistics",
+        "agent": "data_analyst",
+        "query": "Analyze this text and give me statistics: 'The quick brown fox jumps over the lazy dog. This sentence contains every letter of the alphabet.'",
+        "expected_tools": ["text_analyzer"],
+        "description": "Basic text analysis"
+    },
+    
+    # Text - Transformation
+    {
+        "name": "Text Transform",
+        "agent": "data_analyst",
+        "query": "Convert 'hello world from the agentic framework' to title case",
+        "expected_tools": ["text_transformer"],
+        "description": "Simple text transformation"
+    },
+    
+    # Task - Create
+    {
+        "name": "Create Single Task",
+        "agent": "task_manager",
+        "query": "Create a high priority task called 'Review quarterly report' with description 'Analyze Q4 financial data'",
+        "expected_tools": ["create_task"],
+        "description": "Create a single task"
+    },
+    
+    # Knowledge - Search
+    {
+        "name": "Knowledge Query",
+        "agent": "researcher",
+        "query": "What is Python programming language?",
+        "expected_tools": ["knowledge_base_search"],
+        "description": "Simple knowledge base lookup"
+    },
+    
+    # Data - List Operations
+    {
+        "name": "Sort List",
+        "agent": "data_analyst",
+        "query": "Sort this list alphabetically: banana, apple, cherry, date, elderberry",
+        "expected_tools": ["list_operations"],
+        "description": "Simple list sorting"
+    },
+]
+
+# =============================================================================
+# MEDIUM EXAMPLES (Multiple tools, multi-step reasoning)
+# =============================================================================
+
+MEDIUM_EXAMPLES = [
+    # Math combinations
+    {
+        "name": "Multi-Step Calculation",
+        "agent": "math_specialist",
+        "query": "I'm traveling 150 miles. If my car gets 30 miles per gallon and gas costs $3.50 per gallon, how much will the trip cost? Also convert the distance to kilometers.",
+        "expected_tools": ["calculator", "unit_converter"],
+        "description": "Combines calculation with unit conversion"
+    },
+    {
+        "name": "Compound Interest",
+        "agent": "math_specialist",
+        "query": "If I invest $10,000 at 5% annual interest compounded yearly, how much will I have after 10 years? Use the formula: Principal * (1 + rate)^years",
+        "expected_tools": ["calculator"],
+        "description": "Financial calculation requiring formula application"
+    },
+    
+    # DateTime combinations
+    {
+        "name": "Date Planning",
+        "agent": "general_assistant",
+        "query": "Today is the start date. I need to plan a project that takes 45 days. What will be the end date? And how many days until December 31, 2025?",
+        "expected_tools": ["get_current_datetime", "add_days_to_date", "calculate_date_difference"],
+        "description": "Multiple date operations"
+    },
+    {
+        "name": "Event Countdown",
+        "agent": "general_assistant",
+        "query": "Calculate how many days are between January 1, 2025 and July 4, 2025, then add 30 days to July 4, 2025 to find a follow-up date",
+        "expected_tools": ["calculate_date_difference", "add_days_to_date"],
+        "description": "Date difference and addition"
+    },
+    
+    # Text + Data combinations
+    {
+        "name": "Text Analysis Pipeline",
+        "agent": "data_analyst",
+        "query": "Analyze this paragraph for statistics, then transform it to uppercase: 'Machine learning is transforming how we interact with technology. From virtual assistants to recommendation systems, AI is everywhere.'",
+        "expected_tools": ["text_analyzer", "text_transformer"],
+        "description": "Chained text operations"
+    },
+    {
+        "name": "Data Processing",
+        "agent": "data_analyst",
+        "query": "I have this JSON: '{\"employees\": [{\"name\": \"John\", \"age\": 30}, {\"name\": \"Jane\", \"age\": 25}]}'. Extract the employees array, then tell me how many items are in it.",
+        "expected_tools": ["json_parser", "list_operations"],
+        "description": "JSON parsing and list analysis"
+    },
+    
+    # Task Management
+    {
+        "name": "Task Workflow",
+        "agent": "task_manager",
+        "query": "Create three tasks: 'Design mockups' (high priority), 'Write documentation' (medium priority), and 'Code review' (low priority). Then list all pending tasks.",
+        "expected_tools": ["create_task", "list_tasks"],
+        "description": "Multiple task creation and listing"
+    },
+    {
+        "name": "Task Status Update",
+        "agent": "task_manager",
+        "query": "First, list all tasks to see what we have. Then update the first task to 'in_progress' status.",
+        "expected_tools": ["list_tasks", "update_task_status"],
+        "description": "Query and update tasks"
+    },
+    
+    # Research combinations
+    {
+        "name": "Research and Analyze",
+        "agent": "researcher",
+        "query": "Search for information about LangGraph, then analyze the text you find to give me word count and other statistics.",
+        "expected_tools": ["knowledge_base_search", "text_analyzer"],
+        "description": "Search and analyze results"
+    },
+    
+    # Cross-domain
+    {
+        "name": "Recipe Scaling",
+        "agent": "general_assistant",
+        "query": "A recipe for 4 people needs 2.5 cups of flour. I'm cooking for 7 people. How many cups do I need? Also convert that to milliliters (1 cup = 236.588 ml).",
+        "expected_tools": ["calculator", "unit_converter"],
+        "description": "Practical math application"
+    },
+]
+
+# =============================================================================
+# COMPLEX EXAMPLES (Multi-agent capable, complex reasoning, many tools)
+# =============================================================================
+
+COMPLEX_EXAMPLES = [
+    # Comprehensive Project Planning
+    {
+        "name": "Project Planning Suite",
+        "agent": "general_assistant",
+        "query": """I'm starting a new software project. Help me:
+1. Get today's date as the start date
+2. Calculate the end date if the project takes 90 days
+3. Create tasks for: 'Requirements gathering' (high), 'Development' (high), 'Testing' (medium), 'Deployment' (medium)
+4. List all the tasks we created
+5. Search for information about 'agent' to help with the project""",
+        "expected_tools": ["get_current_datetime", "add_days_to_date", "create_task", "list_tasks", "knowledge_base_search"],
+        "description": "Full project setup with dates, tasks, and research"
+    },
+    
+    # Financial Analysis
+    {
+        "name": "Investment Analysis",
+        "agent": "math_specialist",
+        "query": """Analyze this investment scenario:
+1. Initial investment: $50,000
+2. Calculate 7% annual return after 5 years (compound interest: P * (1.07)^5)
+3. Calculate the total gain (final - initial)
+4. What percentage gain is that? ((gain/initial) * 100)
+5. Convert the final amount from USD to approximate EUR (assume 1 USD = 0.92 EUR, so multiply by 0.92)""",
+        "expected_tools": ["calculator"],
+        "description": "Multi-step financial calculations"
+    },
+    
+    # Data Pipeline
+    {
+        "name": "Data Analysis Pipeline",
+        "agent": "data_analyst",
+        "query": """Process this data:
+1. Parse this JSON: '{"products": ["laptop", "phone", "tablet", "watch", "headphones"], "prices": [999, 699, 449, 299, 199]}'
+2. Extract the products list and sort them alphabetically
+3. Calculate the average price: (999 + 699 + 449 + 299 + 199) / 5
+4. Calculate the total inventory value
+5. Analyze this product description text: 'Our premium electronics lineup features cutting-edge technology designed for modern consumers.'""",
+        "expected_tools": ["json_parser", "list_operations", "calculator", "text_analyzer"],
+        "description": "Complete data processing pipeline"
+    },
+    
+    # Event Planning
+    {
+        "name": "Conference Planning",
+        "agent": "general_assistant",
+        "query": """Help me plan a tech conference:
+1. The conference is on 2025-06-15. How many days from today until the conference?
+2. Registration deadline should be 30 days before the conference. What date is that?
+3. Create these tasks:
+   - 'Book venue' (high priority)
+   - 'Send invitations' (high priority)  
+   - 'Arrange catering' (medium priority)
+   - 'Prepare presentations' (medium priority)
+   - 'Set up registration' (high priority)
+4. List all tasks
+5. Calculate the budget: Venue $5000 + Catering $3000 + Marketing $2000 + Miscellaneous $1500""",
+        "expected_tools": ["get_current_datetime", "calculate_date_difference", "add_days_to_date", "create_task", "list_tasks", "calculator"],
+        "description": "Complete event planning workflow"
+    },
+    
+    # Research Report
+    {
+        "name": "Technology Research Report",
+        "agent": "researcher",
+        "query": """Create a mini research report:
+1. Search for information about 'Python' programming
+2. Search for information about 'ReAct' AI pattern
+3. Search for information about 'Streamlit'
+4. Analyze the combined information for text statistics
+5. Create a task to 'Write full research report' with high priority""",
+        "expected_tools": ["knowledge_base_search", "text_analyzer", "create_task"],
+        "description": "Multi-topic research with documentation"
+    },
+    
+    # Fitness Tracker Calculations
+    {
+        "name": "Fitness Progress Analysis",
+        "agent": "general_assistant",
+        "query": """Analyze my fitness progress:
+1. I ran 5.5 miles today. Convert that to kilometers.
+2. My run took 48 minutes. Calculate my pace in minutes per mile (48/5.5).
+3. Also calculate my speed in miles per hour (5.5 / (48/60)).
+4. Convert my speed to km/h.
+5. I weighed 180 pounds at the start. Convert to kg.
+6. Create a task 'Log weekly fitness summary' with medium priority.
+7. What's today's date for my fitness log?""",
+        "expected_tools": ["unit_converter", "calculator", "create_task", "get_current_datetime"],
+        "description": "Comprehensive fitness calculations and tracking"
+    },
+    
+    # Business Metrics
+    {
+        "name": "Business Dashboard",
+        "agent": "data_analyst",
+        "query": """Calculate business metrics from this data:
+1. Parse: '{"sales": [12000, 15000, 18000, 14000, 20000], "months": ["Jan", "Feb", "Mar", "Apr", "May"]}'
+2. Calculate total sales (sum all values)
+3. Calculate average monthly sales
+4. Calculate month-over-month growth from Jan to May: ((20000-12000)/12000)*100
+5. Sort the months by their sales values: 'Jan:12000, Feb:15000, Mar:18000, Apr:14000, May:20000'
+6. Analyze this executive summary: 'Q1 performance exceeded expectations with strong growth in digital channels. Customer acquisition costs decreased by 15% while lifetime value increased.'
+7. Create task 'Prepare Q2 forecast' with high priority""",
+        "expected_tools": ["json_parser", "calculator", "list_operations", "text_analyzer", "create_task"],
+        "description": "Full business analytics workflow"
+    },
+    
+    # Travel Planning
+    {
+        "name": "Travel Itinerary",
+        "agent": "general_assistant",
+        "query": """Plan my trip:
+1. Departure date: 2025-03-15. Arrival date: 2025-03-22. How many days is the trip?
+2. Flight is 6,500 km. Convert to miles.
+3. Budget calculation: Flights $800 + Hotel ($150 * 7 nights) + Food ($75 * 7 days) + Activities $500
+4. Convert total budget to Euros (multiply by 0.92)
+5. Create tasks: 'Book flights' (high), 'Reserve hotel' (high), 'Plan activities' (medium), 'Pack luggage' (low)
+6. List all travel tasks
+7. Add 14 days to return date for post-trip report deadline""",
+        "expected_tools": ["calculate_date_difference", "unit_converter", "calculator", "create_task", "list_tasks", "add_days_to_date"],
+        "description": "Complete travel planning with budget and tasks"
+    },
+    
+    # Content Creation Workflow
+    {
+        "name": "Content Production Pipeline",
+        "agent": "general_assistant",
+        "query": """Set up my content creation workflow:
+1. Get today's date as the start
+2. Content calendar: First post in 7 days, second in 14 days, third in 21 days - calculate all three dates
+3. Create tasks: 'Research topics' (high), 'Write draft' (high), 'Create graphics' (medium), 'Schedule posts' (medium), 'Engage with comments' (low)
+4. Analyze this content brief: 'Target audience is tech professionals aged 25-45. Focus on practical tutorials and industry insights. Maintain professional but approachable tone. Include code examples where relevant.'
+5. Transform the brief to uppercase for emphasis
+6. List all tasks
+7. Search for information about Python to include in first post""",
+        "expected_tools": ["get_current_datetime", "add_days_to_date", "create_task", "text_analyzer", "text_transformer", "list_tasks", "knowledge_base_search"],
+        "description": "Full content workflow setup"
+    },
+    
+    # Scientific Calculations
+    {
+        "name": "Physics Problem Solver",
+        "agent": "math_specialist",
+        "query": """Solve these physics problems:
+1. Calculate kinetic energy: KE = 0.5 * mass * velocity^2, where mass=10kg and velocity=15m/s
+2. Convert the result from Joules to calories (1 Joule = 0.239006 calories): multiply by 0.239006
+3. Calculate gravitational potential energy: PE = mass * g * height, where mass=10kg, g=9.8, height=20m
+4. Calculate total mechanical energy (KE + PE)
+5. If an object falls from 20m, calculate final velocity using v = sqrt(2 * g * h)
+6. Convert the final velocity from m/s to km/h (multiply by 3.6)""",
+        "expected_tools": ["calculator"],
+        "description": "Multi-step physics calculations"
+    },
+]
+
+# =============================================================================
+# EDGE CASE EXAMPLES (Testing robustness)
+# =============================================================================
+
+EDGE_CASES = [
+    {
+        "name": "Empty Input Handling",
+        "agent": "general_assistant",
+        "query": "Analyze this text: ''",
+        "expected_tools": ["text_analyzer"],
+        "description": "Handle empty input"
+    },
+    {
+        "name": "Invalid JSON",
+        "agent": "data_analyst",
+        "query": "Parse this JSON: '{invalid json here}'",
+        "expected_tools": ["json_parser"],
+        "description": "Handle malformed JSON"
+    },
+    {
+        "name": "Unknown Unit",
+        "agent": "math_specialist",
+        "query": "Convert 100 frobnicators to widgets",
+        "expected_tools": ["unit_converter"],
+        "description": "Handle unknown units"
+    },
+    {
+        "name": "Division by Zero",
+        "agent": "math_specialist",
+        "query": "Calculate 100 / 0",
+        "expected_tools": ["calculator"],
+        "description": "Handle division by zero"
+    },
+    {
+        "name": "Invalid Date Format",
+        "agent": "general_assistant",
+        "query": "Calculate days between 'tomorrow' and 'next week'",
+        "expected_tools": ["calculate_date_difference"],
+        "description": "Handle invalid date formats"
+    },
+    {
+        "name": "Very Large Numbers",
+        "agent": "math_specialist",
+        "query": "Calculate 999999999999 * 888888888888",
+        "expected_tools": ["calculator"],
+        "description": "Handle large number calculations"
+    },
+    {
+        "name": "Complex Nested JSON",
+        "agent": "data_analyst",
+        "query": "Parse this and extract 'data.users.0.name': '{\"data\": {\"users\": [{\"name\": \"Alice\", \"role\": \"admin\"}, {\"name\": \"Bob\", \"role\": \"user\"}]}}'",
+        "expected_tools": ["json_parser"],
+        "description": "Handle deeply nested JSON"
+    },
+]
+
+# =============================================================================
+# CONVERSATIONAL EXAMPLES (Natural language queries)
+# =============================================================================
+
+CONVERSATIONAL_EXAMPLES = [
+    {
+        "name": "Casual Math",
+        "agent": "general_assistant",
+        "query": "Hey, I need to split a $247.50 restaurant bill between 5 friends. How much does each person owe including a 20% tip?",
+        "expected_tools": ["calculator"],
+        "description": "Natural language math problem"
+    },
+    {
+        "name": "Friendly Task Request",
+        "agent": "task_manager",
+        "query": "Can you help me remember to buy groceries? It's pretty important, I keep forgetting!",
+        "expected_tools": ["create_task"],
+        "description": "Casual task creation"
+    },
+    {
+        "name": "Curious Question",
+        "agent": "researcher",
+        "query": "I've been hearing a lot about AI agents lately. What exactly are they and how do they work?",
+        "expected_tools": ["knowledge_base_search"],
+        "description": "Natural knowledge query"
+    },
+    {
+        "name": "Planning Help",
+        "agent": "general_assistant",
+        "query": "I'm trying to figure out when to schedule my vacation. If I leave on March 1st 2025 and want to be back before my meeting on March 20th 2025, how long of a trip can I take?",
+        "expected_tools": ["calculate_date_difference"],
+        "description": "Natural date planning"
+    },
+    {
+        "name": "Quick Conversion",
+        "agent": "math_specialist",
+        "query": "The recipe says 350°F but my oven only shows Celsius. What temperature should I set it to?",
+        "expected_tools": ["unit_converter"],
+        "description": "Practical conversion request"
+    },
+]
+
+
+# =============================================================================
+# SQL / TEXT-TO-SQL EXAMPLES
+# =============================================================================
+
+SQL_SIMPLE_EXAMPLES = [
+    {
+        "name": "List Databases",
+        "agent": "sql_specialist",
+        "query": "What databases are available?",
+        "expected_tools": ["list_databases"],
+        "description": "List all available database schemas"
+    },
+    {
+        "name": "Get Schema",
+        "agent": "sql_specialist",
+        "query": "Show me the schema for the ecommerce database",
+        "expected_tools": ["get_schema"],
+        "description": "View database schema"
+    },
+    {
+        "name": "Table Info",
+        "agent": "sql_specialist",
+        "query": "What columns are in the customers table in the ecommerce database?",
+        "expected_tools": ["get_table_info"],
+        "description": "Get detailed table information"
+    },
+    {
+        "name": "SQL Examples",
+        "agent": "sql_specialist",
+        "query": "Show me some examples of JOIN queries",
+        "expected_tools": ["sql_examples"],
+        "description": "Get example SQL queries"
+    },
+    {
+        "name": "Explain SQL",
+        "agent": "sql_specialist",
+        "query": "Explain this SQL: SELECT c.first_name, COUNT(o.order_id) FROM customers c LEFT JOIN orders o ON c.customer_id = o.customer_id GROUP BY c.first_name",
+        "expected_tools": ["explain_sql"],
+        "description": "Explain a SQL query in plain English"
+    },
+]
+
+SQL_MEDIUM_EXAMPLES = [
+    {
+        "name": "Simple Text-to-SQL",
+        "agent": "sql_specialist",
+        "query": "Write a SQL query to get all customers from the ecommerce database who are from the USA",
+        "expected_tools": ["get_schema", "generate_sql"],
+        "description": "Basic natural language to SQL"
+    },
+    {
+        "name": "Count Query",
+        "agent": "sql_specialist",
+        "query": "How many orders are in pending status? Use the ecommerce database.",
+        "expected_tools": ["get_schema", "generate_sql", "execute_sql"],
+        "description": "Count with filter"
+    },
+    {
+        "name": "Join Query",
+        "agent": "sql_specialist",
+        "query": "I need a query that shows customer names along with their order totals from the ecommerce database",
+        "expected_tools": ["get_schema", "generate_sql"],
+        "description": "Query requiring JOIN"
+    },
+    {
+        "name": "HR Database Query",
+        "agent": "sql_specialist",
+        "query": "Show me all employees in the Engineering department with their salaries, using the hr database",
+        "expected_tools": ["get_schema", "generate_sql"],
+        "description": "Query on HR database"
+    },
+    {
+        "name": "Aggregation Query",
+        "agent": "sql_specialist",
+        "query": "What is the average order value by customer country in the ecommerce database?",
+        "expected_tools": ["get_schema", "generate_sql"],
+        "description": "Aggregation with grouping"
+    },
+    {
+        "name": "Validate and Execute",
+        "agent": "sql_specialist",
+        "query": "Validate this SQL and then execute it: SELECT product_name, price FROM products WHERE price > 100 ORDER BY price DESC",
+        "expected_tools": ["validate_sql", "execute_sql"],
+        "description": "Validate and run a query"
+    },
+]
+
+SQL_COMPLEX_EXAMPLES = [
+    {
+        "name": "Multi-Table Analysis",
+        "agent": "sql_analyst",
+        "query": """Using the ecommerce database:
+1. First show me the database schema
+2. Write a query to find the top 5 customers by total order value
+3. The query should show customer name, email, number of orders, and total spent
+4. Explain what the query does
+5. Execute it to see sample results""",
+        "expected_tools": ["get_schema", "generate_sql", "explain_sql", "execute_sql"],
+        "description": "Complete text-to-SQL workflow with analysis"
+    },
+    {
+        "name": "HR Analytics",
+        "agent": "sql_analyst",
+        "query": """I need to analyze the HR database:
+1. Show me the schema first
+2. Write a query to find the average salary by department
+3. Also write a query to find employees who earn more than their department's average
+4. Explain both queries""",
+        "expected_tools": ["get_schema", "generate_sql", "explain_sql"],
+        "description": "HR analytics with subqueries"
+    },
+    {
+        "name": "Sales Report Query",
+        "agent": "sql_analyst",
+        "query": """Create a comprehensive sales report query for the ecommerce database that shows:
+- Monthly revenue totals
+- Number of orders per month
+- Average order value per month
+- Best selling product category per month
+Group by year and month, order by date descending""",
+        "expected_tools": ["get_schema", "generate_sql", "validate_sql", "explain_sql"],
+        "description": "Complex reporting query"
+    },
+    {
+        "name": "Customer Segmentation",
+        "agent": "sql_analyst",
+        "query": """Using the ecommerce database, help me segment customers:
+1. Find customers who have made more than 3 orders (loyal customers)
+2. Find customers who haven't ordered in the last 6 months (at-risk)
+3. Find customers with order total > $1000 (high value)
+Create SQL for each segment and explain the logic""",
+        "expected_tools": ["get_schema", "generate_sql", "explain_sql"],
+        "description": "Customer segmentation queries"
+    },
+    {
+        "name": "Web Analytics Query",
+        "agent": "sql_analyst",
+        "query": """Explore the analytics database and write queries to:
+1. Find the top 10 most visited pages
+2. Calculate the bounce rate (sessions with only 1 page view)
+3. Find the average session duration by device type
+4. Identify the most common user journey (page sequence)""",
+        "expected_tools": ["get_schema", "generate_sql", "explain_sql", "execute_sql"],
+        "description": "Web analytics queries"
+    },
+    {
+        "name": "Cross-Database Understanding",
+        "agent": "sql_analyst",
+        "query": """I'm new to these databases. Please:
+1. List all available databases
+2. Show me the schema for each one
+3. Give me one useful example query for each database
+4. Explain what business questions each database can answer""",
+        "expected_tools": ["list_databases", "get_schema", "sql_examples"],
+        "description": "Complete database exploration"
+    },
+    {
+        "name": "Performance Query",
+        "agent": "sql_analyst",
+        "query": """Using the hr database, create a performance analysis:
+1. Find employees and their project assignments
+2. Calculate total hours allocated per employee across all projects
+3. Find employees assigned to more than 2 projects
+4. Identify departments with the most active projects
+Write optimized SQL for each and explain your approach""",
+        "expected_tools": ["get_schema", "generate_sql", "validate_sql", "explain_sql"],
+        "description": "HR performance analysis"
+    },
+    {
+        "name": "Natural Language Complex",
+        "agent": "sql_analyst",
+        "query": """I'm a business analyst and I need to answer this question:
+'Which product categories are underperforming in terms of order volume but have high inventory?'
+Use the ecommerce database. Walk me through your approach, show the SQL, and explain the results.""",
+        "expected_tools": ["get_schema", "generate_sql", "explain_sql", "execute_sql", "calculator"],
+        "description": "Business question to SQL with analysis"
+    },
+]
+
+
+# =============================================================================
+# NAME MATCHING EXAMPLES
+# =============================================================================
+
+NAME_MATCHING_SIMPLE_EXAMPLES = [
+    {
+        "name": "Load Names",
+        "agent": "name_matcher",
+        "query": """Load these company names for matching:
+["Emirates NBD", "Emirates NBD PJSC", "Emirates NBD Group", "Emirates NBD Bank", 
+"DEWA", "DEWA Authority", "Dubai Electricity and Water", "Dubai Electricity and Water Authority",
+"Etisalat", "Emirates Telecommunications", "Etisalat UAE", "Emirates Telecom Group"]""",
+        "expected_tools": ["load_names_for_matching"],
+        "description": "Load a small list of names for matching"
+    },
+    {
+        "name": "Session Info",
+        "agent": "name_matcher",
+        "query": "Show me information about the current name matching session",
+        "expected_tools": ["get_session_info"],
+        "description": "View session statistics"
+    },
+    {
+        "name": "Analyze Name",
+        "agent": "name_matcher",
+        "query": "Analyze how the name 'Emirates NBD PJSC' will be processed for matching",
+        "expected_tools": ["analyze_name"],
+        "description": "Understand name processing"
+    },
+    {
+        "name": "Simple Match",
+        "agent": "name_matcher",
+        "query": "Find all names that match 'Emirates NBD Bank' from the loaded list",
+        "expected_tools": ["find_matching_names"],
+        "description": "Find matches for a single name"
+    },
+]
+
+NAME_MATCHING_MEDIUM_EXAMPLES = [
+    {
+        "name": "Load and Match",
+        "agent": "name_matcher",
+        "query": """First load these names:
+["Abu Dhabi Commercial Bank", "ADCB", "ADCB Bank", "Abu Dhabi Commercial Bank PJSC",
+"First Abu Dhabi Bank", "FAB", "FAB Bank", "First Abu Dhabi Bank PJSC",
+"Dubai Islamic Bank", "DIB", "DIB Bank", "Dubai Islamic Bank PJSC"]
+
+Then find all matches for "Abu Dhabi Commercial Bank" """,
+        "expected_tools": ["load_names_for_matching", "find_matching_names"],
+        "description": "Load names and find matches"
+    },
+    {
+        "name": "Batch Matching",
+        "agent": "name_matcher",
+        "query": """Load these names:
+["Emaar Properties", "Emaar", "Emaar Properties PJSC", "Emaar Development",
+"DAMAC Properties", "DAMAC", "DAMAC Holding", "DAMAC Real Estate",
+"Nakheel", "Nakheel Properties", "Nakheel PJSC", "Nakheel Development"]
+
+Then batch match these canonical names: ["Emaar Properties", "DAMAC Properties", "Nakheel"]""",
+        "expected_tools": ["load_names_for_matching", "batch_match_names"],
+        "description": "Match multiple canonical names at once"
+    },
+    {
+        "name": "Create Mapping",
+        "agent": "name_matcher",
+        "query": """Load these names:
+["DP World", "DP World Limited", "DP World PJSC", "Dubai Ports World",
+"Jebel Ali Free Zone", "JAFZA", "Jafza", "JAFZA Authority"]
+
+Create a canonical mapping for "DP World" showing all its variations""",
+        "expected_tools": ["load_names_for_matching", "create_canonical_mapping"],
+        "description": "Create a structured mapping"
+    },
+    {
+        "name": "Threshold Adjustment",
+        "agent": "name_matcher",
+        "query": """Load these names:
+["Al Futtaim Group", "Al-Futtaim", "Alfuttaim", "Al Futtaim Holdings",
+"Majid Al Futtaim", "MAF", "Majid Al Futtaim Holding", "MAF Holdings"]
+
+Find matches for "Al Futtaim" with a low threshold of 0.5 to catch more variations""",
+        "expected_tools": ["load_names_for_matching", "find_matching_names"],
+        "description": "Adjust matching threshold"
+    },
+]
+
+NAME_MATCHING_COMPLEX_EXAMPLES = [
+    {
+        "name": "Large Batch Processing",
+        "agent": "name_matcher",
+        "query": """I have a large list of UAE company names. Load them in batches:
+
+Batch 1:
+["Emirates NBD", "Emirates NBD PJSC", "Emirates NBD Bank", "ENBD",
+"First Abu Dhabi Bank", "FAB", "FAB Bank", "First AD Bank",
+"Abu Dhabi Commercial Bank", "ADCB", "ADCB PJSC", "AD Commercial Bank",
+"Dubai Islamic Bank", "DIB", "DIB PJSC", "DI Bank",
+"Mashreq Bank", "Mashreq", "Mashreq PJSC", "Mashreqbank"]
+
+Batch 2 (append to same session):
+["DEWA", "Dubai Electricity", "Dubai Electricity and Water", "Dubai Electricity and Water Authority",
+"Etisalat", "Emirates Telecommunications", "Etisalat UAE", "E& UAE",
+"Du", "Emirates Integrated Telecommunications", "EITC", "Du Telecom",
+"ADNOC", "Abu Dhabi National Oil", "Abu Dhabi National Oil Company", "ADNOC Group"]
+
+Then:
+1. Show session info
+2. Create bulk mappings for: ["Emirates NBD", "First Abu Dhabi Bank", "DEWA", "Etisalat", "ADNOC"]
+3. Analyze why "E& UAE" might not match "Etisalat" """,
+        "expected_tools": ["load_names_for_matching", "get_session_info", "bulk_create_mappings", "analyze_name"],
+        "description": "Process large lists in batches"
+    },
+    {
+        "name": "Full Standardization Workflow",
+        "agent": "name_data_processor",
+        "query": """I need to standardize company names. Here's my data:
+
+Names list:
+["Emaar Properties", "EMAAR", "Emaar Properties PJSC", "Emaar Development LLC",
+"Dubai Holding", "Dubai Holding LLC", "DH Group", "Dubai Holding Group",
+"Meraas", "Meraas Holding", "Meraas Development", "Meraas PJSC",
+"Aldar Properties", "Aldar", "ALDAR PJSC", "Aldar Development",
+"Mubadala", "Mubadala Investment", "Mubadala Investment Company", "Mubadala PJSC"]
+
+Canonical names I want to use:
+["Emaar Properties", "Dubai Holding", "Meraas", "Aldar Properties", "Mubadala"]
+
+Please:
+1. Load all the names
+2. Create mappings for each canonical name
+3. Output a summary showing which variations map to which canonical name
+4. Identify any names that don't match any canonical (orphans)""",
+        "expected_tools": ["load_names_for_matching", "bulk_create_mappings", "get_session_info"],
+        "description": "Complete standardization workflow"
+    },
+    {
+        "name": "Analyze Matching Quality",
+        "agent": "name_matcher",
+        "query": """Load these potentially tricky names:
+["Bank ABC", "ABC Bank", "Arab Banking Corporation", "Arab Banking Corp",
+"Commercial Bank of Dubai", "CBD", "CB Dubai", "Commercial Bank Dubai",
+"National Bank of Fujairah", "NBF", "NB Fujairah", "Fujairah National Bank",
+"Sharjah Islamic Bank", "SIB", "SI Bank", "Islamic Bank of Sharjah"]
+
+Then:
+1. Analyze how "Bank ABC" and "Arab Banking Corporation" are processed
+2. Find matches for "Bank ABC" - explain why some might not match
+3. Find matches for "Commercial Bank of Dubai" with threshold 0.55
+4. Create a mapping for "National Bank of Fujairah"
+5. Explain what makes these names challenging to match""",
+        "expected_tools": ["load_names_for_matching", "analyze_name", "find_matching_names", "create_canonical_mapping"],
+        "description": "Analyze matching quality and edge cases"
+    },
+    {
+        "name": "Government Entity Matching",
+        "agent": "name_matcher",
+        "query": """Load UAE government entities:
+["Dubai Municipality", "DM", "Dubai Mun", "Municipality of Dubai",
+"Roads and Transport Authority", "RTA", "RTA Dubai", "Dubai RTA",
+"Dubai Health Authority", "DHA", "DH Authority", "Health Authority Dubai",
+"Department of Economic Development", "DED", "Dubai DED", "Economic Development Dept",
+"Dubai Land Department", "DLD", "Land Dept Dubai", "Dubai Land Dept",
+"Knowledge and Human Development Authority", "KHDA", "KHD Authority"]
+
+Find matches for each of these canonical names:
+1. Dubai Municipality
+2. Roads and Transport Authority  
+3. Dubai Health Authority
+4. Department of Economic Development
+5. Dubai Land Department
+6. Knowledge and Human Development Authority
+
+Use a threshold of 0.60 to catch abbreviations like RTA, DHA, DED""",
+        "expected_tools": ["load_names_for_matching", "batch_match_names"],
+        "description": "Match government entities with abbreviations"
+    },
+]
+
+
+def print_examples():
+    """Print all examples in a formatted way."""
+    
+    all_categories = [
+        ("🟢 SIMPLE EXAMPLES", SIMPLE_EXAMPLES),
+        ("🟡 MEDIUM EXAMPLES", MEDIUM_EXAMPLES),
+        ("🔴 COMPLEX EXAMPLES", COMPLEX_EXAMPLES),
+        ("⚠️ EDGE CASES", EDGE_CASES),
+        ("💬 CONVERSATIONAL", CONVERSATIONAL_EXAMPLES),
+        ("🗄️ SQL SIMPLE", SQL_SIMPLE_EXAMPLES),
+        ("🗄️ SQL MEDIUM", SQL_MEDIUM_EXAMPLES),
+        ("🗄️ SQL COMPLEX", SQL_COMPLEX_EXAMPLES),
+        ("🏷️ NAME MATCHING SIMPLE", NAME_MATCHING_SIMPLE_EXAMPLES),
+        ("🏷️ NAME MATCHING MEDIUM", NAME_MATCHING_MEDIUM_EXAMPLES),
+        ("🏷️ NAME MATCHING COMPLEX", NAME_MATCHING_COMPLEX_EXAMPLES),
+    ]
+    
+    for category_name, examples in all_categories:
+        print(f"\n{'='*80}")
+        print(f"{category_name}")
+        print('='*80)
+        
+        for i, example in enumerate(examples, 1):
+            print(f"\n{i}. {example['name']}")
+            print(f"   Agent: {example['agent']}")
+            print(f"   Tools: {', '.join(example['expected_tools'])}")
+            print(f"   Description: {example['description']}")
+            print(f"   Query: {example['query'][:100]}{'...' if len(example['query']) > 100 else ''}")
+
+
+def get_example_by_name(name: str) -> dict:
+    """Get a specific example by name."""
+    all_examples = (
+        SIMPLE_EXAMPLES + 
+        MEDIUM_EXAMPLES + 
+        COMPLEX_EXAMPLES + 
+        EDGE_CASES + 
+        CONVERSATIONAL_EXAMPLES +
+        SQL_SIMPLE_EXAMPLES +
+        SQL_MEDIUM_EXAMPLES +
+        SQL_COMPLEX_EXAMPLES +
+        NAME_MATCHING_SIMPLE_EXAMPLES +
+        NAME_MATCHING_MEDIUM_EXAMPLES +
+        NAME_MATCHING_COMPLEX_EXAMPLES
+    )
+    
+    for example in all_examples:
+        if example['name'].lower() == name.lower():
+            return example
+    return None
+
+
+def get_examples_by_agent(agent_name: str) -> list:
+    """Get all examples for a specific agent."""
+    all_examples = (
+        SIMPLE_EXAMPLES + 
+        MEDIUM_EXAMPLES + 
+        COMPLEX_EXAMPLES + 
+        EDGE_CASES + 
+        CONVERSATIONAL_EXAMPLES +
+        SQL_SIMPLE_EXAMPLES +
+        SQL_MEDIUM_EXAMPLES +
+        SQL_COMPLEX_EXAMPLES +
+        NAME_MATCHING_SIMPLE_EXAMPLES +
+        NAME_MATCHING_MEDIUM_EXAMPLES +
+        NAME_MATCHING_COMPLEX_EXAMPLES
+    )
+    
+    return [ex for ex in all_examples if ex['agent'] == agent_name]
+
+
+def get_examples_by_tool(tool_name: str) -> list:
+    """Get all examples that use a specific tool."""
+    all_examples = (
+        SIMPLE_EXAMPLES + 
+        MEDIUM_EXAMPLES + 
+        COMPLEX_EXAMPLES + 
+        EDGE_CASES + 
+        CONVERSATIONAL_EXAMPLES +
+        SQL_SIMPLE_EXAMPLES +
+        SQL_MEDIUM_EXAMPLES +
+        SQL_COMPLEX_EXAMPLES +
+        NAME_MATCHING_SIMPLE_EXAMPLES +
+        NAME_MATCHING_MEDIUM_EXAMPLES +
+        NAME_MATCHING_COMPLEX_EXAMPLES
+    )
+    
+    return [ex for ex in all_examples if tool_name in ex['expected_tools']]
+
+
+if __name__ == "__main__":
+    print_examples()
+    
+    print("\n" + "="*80)
+    print("USAGE INSTRUCTIONS")
+    print("="*80)
+    print("""
+1. Run the Streamlit app: streamlit run app.py
+2. Select an agent from the sidebar
+3. Copy any query from above and paste it into the chat
+4. Watch the ReAct reasoning process in action!
+
+Or run automated tests:
+    python run_tests.py
+    """)
