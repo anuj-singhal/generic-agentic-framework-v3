@@ -1,0 +1,11 @@
+CLIENT_ID,FULL_NAME,COUNTRY,RISK_PROFILE,ONBOARDING_DATE,KYC_STATUS
+1001,Anuj Singhal,UAE,Balanced,2025-04-30,Approved
+1002,Sara Khan,UAE,Conservative,2025-03-10,Approved
+1003,Michael Chen,USA,Aggressive,2025-04-20,Approved
+1004,Aisha Al Noor,UAE,Balanced,2025-02-01,Approved
+1005,John Patel,India,Balanced,2025-05-04,Approved
+1006,Fatima Hassan,UAE,Conservative,2025-03-30,Pending
+1007,Omar Rahman,UAE,Aggressive,2025-03-19,Approved
+1008,Priya Iyer,India,Balanced,2025-02-07,Approved
+1009,Daniel Smith,UK,Conservative,2025-04-30,Approved
+1010,Lina Rodrigues,Singapore,Aggressive,2025-04-10,Approved

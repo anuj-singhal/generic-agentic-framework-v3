@@ -25,7 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from test_examples import (
     SIMPLE_EXAMPLES,
-    MEDIUM_EXAMPLES, 
+    MEDIUM_EXAMPLES,
     COMPLEX_EXAMPLES,
     EDGE_CASES,
     CONVERSATIONAL_EXAMPLES,
@@ -35,6 +35,9 @@ from test_examples import (
     NAME_MATCHING_SIMPLE_EXAMPLES,
     NAME_MATCHING_MEDIUM_EXAMPLES,
     NAME_MATCHING_COMPLEX_EXAMPLES,
+    WEALTH_SIMPLE_EXAMPLES,
+    WEALTH_MEDIUM_EXAMPLES,
+    WEALTH_COMPLEX_EXAMPLES,
     get_examples_by_agent,
     get_examples_by_tool
 )
@@ -62,7 +65,7 @@ class TestRunner:
         self.results: List[TestResult] = []
         
         if not self.api_key:
-            print("⚠️  Warning: OPENAI_API_KEY not set. Tests will fail.")
+            print("[WARN] OPENAI_API_KEY not set. Tests will fail.")
             print("   Set it with: export OPENAI_API_KEY='your-key'")
     
     def setup(self):
@@ -83,7 +86,7 @@ class TestRunner:
         from tools.example_tools import get_all_tools
         self.tools = get_all_tools()
         
-        print(f"✅ Framework initialized with {len(self.tools)} tools")
+        print(f"[OK] Framework initialized with {len(self.tools)} tools")
     
     def run_single_test(self, example: Dict[str, Any]) -> TestResult:
         """Run a single test example."""
@@ -94,8 +97,8 @@ class TestRunner:
         agent_name = example['agent']
         query = example['query']
         
-        print(f"\n{'─'*60}")
-        print(f"🧪 Running: {name}")
+        print(f"\n{'='*60}")
+        print(f"[TEST] Running: {name}")
         print(f"   Agent: {agent_name}")
         print(f"   Query: {query[:80]}{'...' if len(query) > 80 else ''}")
         
@@ -155,18 +158,18 @@ class TestRunner:
             
             # Print result
             if success:
-                print(f"   ✅ PASSED ({execution_time:.2f}s, {iterations} iterations)")
+                print(f"   [PASS] ({execution_time:.2f}s, {iterations} iterations)")
                 print(f"   Tools used: {', '.join(test_result.tools_used) or 'None'}")
                 print(f"   Response: {response[:100]}...")
             else:
-                print(f"   ❌ FAILED ({execution_time:.2f}s)")
+                print(f"   [FAIL] ({execution_time:.2f}s)")
                 print(f"   Error: {error}")
             
             return test_result
             
         except Exception as e:
             execution_time = time.time() - start_time
-            print(f"   ❌ ERROR: {str(e)}")
+            print(f"   [ERROR] {str(e)}")
             
             return TestResult(
                 name=name,
@@ -196,10 +199,14 @@ class TestRunner:
             'name_medium': NAME_MATCHING_MEDIUM_EXAMPLES,
             'name_complex': NAME_MATCHING_COMPLEX_EXAMPLES,
             'name_matching': NAME_MATCHING_SIMPLE_EXAMPLES + NAME_MATCHING_MEDIUM_EXAMPLES + NAME_MATCHING_COMPLEX_EXAMPLES,
+            'wealth_simple': WEALTH_SIMPLE_EXAMPLES,
+            'wealth_medium': WEALTH_MEDIUM_EXAMPLES,
+            'wealth_complex': WEALTH_COMPLEX_EXAMPLES,
+            'wealth': WEALTH_SIMPLE_EXAMPLES + WEALTH_MEDIUM_EXAMPLES + WEALTH_COMPLEX_EXAMPLES,
         }
         
         if category not in categories:
-            print(f"❌ Unknown category: {category}")
+            print(f"[ERROR] Unknown category: {category}")
             print(f"   Available: {', '.join(categories.keys())}")
             return []
         
@@ -219,13 +226,14 @@ class TestRunner:
     def run_all(self) -> List[TestResult]:
         """Run all test categories."""
         all_results = []
-        
-        for category in ['simple', 'medium', 'complex', 'edge', 'conversational', 
+
+        for category in ['simple', 'medium', 'complex', 'edge', 'conversational',
                          'sql_simple', 'sql_medium', 'sql_complex',
-                         'name_simple', 'name_medium', 'name_complex']:
+                         'name_simple', 'name_medium', 'name_complex',
+                         'wealth_simple', 'wealth_medium', 'wealth_complex']:
             results = self.run_category(category)
             all_results.extend(results)
-        
+
         return all_results
     
     def run_for_agent(self, agent_name: str) -> List[TestResult]:
@@ -233,7 +241,7 @@ class TestRunner:
         examples = get_examples_by_agent(agent_name)
         
         if not examples:
-            print(f"❌ No examples found for agent: {agent_name}")
+            print(f"[ERROR] No examples found for agent: {agent_name}")
             return []
         
         print(f"\n{'='*60}")
@@ -251,7 +259,7 @@ class TestRunner:
     def print_summary(self):
         """Print test summary."""
         if not self.results:
-            print("\n⚠️  No tests were run.")
+            print("\n[WARN] No tests were run.")
             return
         
         total = len(self.results)
@@ -367,10 +375,11 @@ Commands:
 
 def main():
     parser = argparse.ArgumentParser(description="Run agentic framework tests")
-    parser.add_argument('--category', '-c', 
-                        choices=['simple', 'medium', 'complex', 'edge', 'conversational', 
+    parser.add_argument('--category', '-c',
+                        choices=['simple', 'medium', 'complex', 'edge', 'conversational',
                                  'sql', 'sql_simple', 'sql_medium', 'sql_complex',
-                                 'name_matching', 'name_simple', 'name_medium', 'name_complex', 'all'],
+                                 'name_matching', 'name_simple', 'name_medium', 'name_complex',
+                                 'wealth', 'wealth_simple', 'wealth_medium', 'wealth_complex', 'all'],
                         help='Test category to run')
     parser.add_argument('--agent', '-a', help='Run tests for specific agent')
     parser.add_argument('--interactive', '-i', action='store_true', help='Interactive mode')

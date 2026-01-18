@@ -1,0 +1,298 @@
+{
+  "tables": [
+    {
+      "table_name": "CLIENTS",
+      "table_description": "Master table containing investor/client profiles used to link ownership of portfolios",
+      "columns": [
+        {
+          "column_name": "CLIENT_ID",
+          "data_type": "NUMBER(38,0)",
+          "description": "Unique identifier for each client in the system",
+          "is_primary_key": true,
+          "nullable": false,
+          "sample_values": [1001, 1002, 1003, 1004, 1005]
+        },
+        {
+          "column_name": "FULL_NAME",
+          "data_type": "VARCHAR(200)",
+          "description": "Client full name",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["Anuj Singhal", "Sara Khan", "Michael Chen", "Aisha Al Noor", "John Patel"]
+        },
+        {
+          "column_name": "COUNTRY",
+          "data_type": "VARCHAR(100)",
+          "description": "Country of residence",
+          "is_primary_key": false,
+          "nullable": true,
+          "sample_values": ["UAE", "India", "USA", "UK", "Singapore"]
+        },
+        {
+          "column_name": "RISK_PROFILE",
+          "data_type": "VARCHAR(50)",
+          "description": "Client risk profile classification",
+          "is_primary_key": false,
+          "nullable": true,
+          "sample_values": ["Conservative", "Balanced", "Aggressive", "Balanced", "Conservative"]
+        },
+        {
+          "column_name": "ONBOARDING_DATE",
+          "data_type": "DATE",
+          "description": "Date the client was onboarded",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["2024-01-15", "2023-07-03", "2025-02-11", "2022-10-20", "2024-09-01"]
+        },
+        {
+          "column_name": "KYC_STATUS",
+          "data_type": "VARCHAR(30)",
+          "description": "KYC verification status for the client",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["Approved", "Pending", "Approved", "Rejected", "Approved"]
+        }
+      ]
+    },
+    {
+      "table_name": "PORTFOLIOS",
+      "table_description": "Portfolio master table representing investment accounts owned by clients (supports multiple portfolios per client)",
+      "columns": [
+        {
+          "column_name": "PORTFOLIO_ID",
+          "data_type": "NUMBER(38,0)",
+          "description": "Unique identifier for each portfolio",
+          "is_primary_key": true,
+          "nullable": false,
+          "sample_values": [20001, 20002, 20003, 20004, 20005]
+        },
+        {
+          "column_name": "CLIENT_ID",
+          "data_type": "NUMBER(38,0)",
+          "description": "Client who owns this portfolio (FK to CLIENTS.CLIENT_ID)",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": [1001, 1001, 1002, 1003, 1004]
+        },
+        {
+          "column_name": "PORTFOLIO_NAME",
+          "data_type": "VARCHAR(200)",
+          "description": "Human-readable portfolio name",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["Core Growth", "Tech Momentum", "Retirement", "Income", "High Risk Trading"]
+        },
+        {
+          "column_name": "BASE_CURRENCY",
+          "data_type": "VARCHAR(10)",
+          "description": "Base/reporting currency for the portfolio",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["USD", "USD", "AED", "EUR", "USD"]
+        },
+        {
+          "column_name": "INCEPTION_DATE",
+          "data_type": "DATE",
+          "description": "Portfolio start date",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["2022-01-01", "2023-03-15", "2021-06-10", "2024-04-05", "2025-01-20"]
+        },
+        {
+          "column_name": "STATUS",
+          "data_type": "VARCHAR(20)",
+          "description": "Portfolio lifecycle status",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["Active", "Active", "Active", "Closed", "Active"]
+        }
+      ]
+    },
+    {
+      "table_name": "ASSETS",
+      "table_description": "Instrument master table defining tradable symbols (equities/ETFs/crypto, etc.) referenced by holdings and transactions",
+      "columns": [
+        {
+          "column_name": "ASSET_ID",
+          "data_type": "NUMBER(38,0)",
+          "description": "Unique identifier for each asset/instrument",
+          "is_primary_key": true,
+          "nullable": false,
+          "sample_values": [30001, 30002, 30003, 30004, 30005]
+        },
+        {
+          "column_name": "SYMBOL",
+          "data_type": "VARCHAR(30)",
+          "description": "Tradable ticker/symbol",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["AAPL", "MSFT", "NVDA", "SPY", "BTC-USD"]
+        },
+        {
+          "column_name": "ASSET_NAME",
+          "data_type": "VARCHAR(250)",
+          "description": "Full name of the asset",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["Apple Inc.", "Microsoft Corp.", "NVIDIA Corp.", "SPDR S&P 500 ETF Trust", "Bitcoin"]
+        },
+        {
+          "column_name": "ASSET_TYPE",
+          "data_type": "VARCHAR(50)",
+          "description": "Type/category of asset",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["Equity", "Equity", "Equity", "ETF", "Crypto"]
+        },
+        {
+          "column_name": "CURRENCY",
+          "data_type": "VARCHAR(10)",
+          "description": "Trading currency of the asset",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["USD", "USD", "USD", "USD", "USD"]
+        },
+        {
+          "column_name": "EXCHANGE",
+          "data_type": "VARCHAR(50)",
+          "description": "Primary exchange/venue",
+          "is_primary_key": false,
+          "nullable": true,
+          "sample_values": ["NASDAQ", "NASDAQ", "NASDAQ", "NYSEARCA", "CRYPTO"]
+        }
+      ]
+    },
+    {
+      "table_name": "TRANSACTIONS",
+      "table_description": "Immutable transaction ledger capturing buy/sell activity (source of truth for reconstructing positions and cash flows)",
+      "columns": [
+        {
+          "column_name": "TRANSACTION_ID",
+          "data_type": "NUMBER(38,0)",
+          "description": "Unique identifier for each transaction",
+          "is_primary_key": true,
+          "nullable": false,
+          "sample_values": [9000001, 9000002, 9000003, 9000004, 9000005]
+        },
+        {
+          "column_name": "PORTFOLIO_ID",
+          "data_type": "NUMBER(38,0)",
+          "description": "Portfolio impacted by the trade (FK to PORTFOLIOS.PORTFOLIO_ID)",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": [20001, 20001, 20002, 20003, 20001]
+        },
+        {
+          "column_name": "ASSET_ID",
+          "data_type": "NUMBER(38,0)",
+          "description": "Traded asset (FK to ASSETS.ASSET_ID)",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": [30001, 30003, 30002, 30004, 30001]
+        },
+        {
+          "column_name": "TRADE_DATE",
+          "data_type": "DATE",
+          "description": "Execution/trade date",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["2025-01-10", "2025-01-11", "2025-02-01", "2025-02-07", "2025-03-03"]
+        },
+        {
+          "column_name": "TRANSACTION_TYPE",
+          "data_type": "VARCHAR(10)",
+          "description": "Transaction action type (BUY/SELL)",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["BUY", "BUY", "BUY", "SELL", "SELL"]
+        },
+        {
+          "column_name": "QUANTITY",
+          "data_type": "NUMBER(18,6)",
+          "description": "Number of units/shares traded (positive quantity; direction determined by TRANSACTION_TYPE)",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": [10.0, 5.0, 25.0, 8.0, 2.0]
+        },
+        {
+          "column_name": "PRICE",
+          "data_type": "NUMBER(18,6)",
+          "description": "Executed unit price",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": [185.25, 720.10, 412.55, 498.30, 192.75]
+        },
+        {
+          "column_name": "FEES",
+          "data_type": "NUMBER(18,6)",
+          "description": "Total fees/commissions associated with the transaction",
+          "is_primary_key": false,
+          "nullable": true,
+          "sample_values": [1.25, 2.50, 0.99, 1.10, 0.50]
+        },
+        {
+          "column_name": "CURRENCY",
+          "data_type": "VARCHAR(10)",
+          "description": "Currency of the trade (often matches asset currency)",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["USD", "USD", "USD", "USD", "USD"]
+        },
+        {
+          "column_name": "CREATED_AT",
+          "data_type": "TIMESTAMP",
+          "description": "Ingestion/record creation timestamp for auditability",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["2025-01-10 14:05:12", "2025-01-11 10:22:45", "2025-02-01 16:01:09", "2025-02-07 12:44:30", "2025-03-03 09:12:02"]
+        }
+      ]
+    },
+    {
+      "table_name": "HOLDINGS",
+      "table_description": "Current position snapshot per portfolio and asset (can be computed from transactions or maintained as a materialized view/table)",
+      "columns": [
+        {
+          "column_name": "PORTFOLIO_ID",
+          "data_type": "NUMBER(38,0)",
+          "description": "Portfolio identifier (FK to PORTFOLIOS.PORTFOLIO_ID)",
+          "is_primary_key": true,
+          "nullable": false,
+          "sample_values": [20001, 20001, 20002, 20003, 20005]
+        },
+        {
+          "column_name": "ASSET_ID",
+          "data_type": "NUMBER(38,0)",
+          "description": "Asset identifier (FK to ASSETS.ASSET_ID)",
+          "is_primary_key": true,
+          "nullable": false,
+          "sample_values": [30001, 30003, 30002, 30004, 30005]
+        },
+        {
+          "column_name": "QUANTITY",
+          "data_type": "NUMBER(18,6)",
+          "description": "Current units held for the asset in the portfolio",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": [8.0, 5.0, 25.0, 12.0, 0.250000]
+        },
+        {
+          "column_name": "AVG_COST",
+          "data_type": "NUMBER(18,6)",
+          "description": "Weighted average cost per unit for the position",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": [187.125000, 720.100000, 412.550000, 475.330000, 40000.000000]
+        },
+        {
+          "column_name": "LAST_UPDATED",
+          "data_type": "TIMESTAMP",
+          "description": "Timestamp when the holdings snapshot was last updated",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["2025-03-03 09:15:00", "2025-03-03 09:15:00", "2025-03-01 18:10:00", "2025-02-10 11:00:00", "2025-01-28 20:05:00"]
+        }
+      ]
+    }
+  ]
+}

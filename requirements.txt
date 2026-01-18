@@ -17,3 +17,6 @@ httpx>=0.27.0
 requests>=2.31.0
 duckduckgo-search>=6.0.0
 wikipedia>=1.4.0
+
+# Database
+duckdb>=1.0.0

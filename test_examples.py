@@ -810,6 +810,191 @@ Use a threshold of 0.60 to catch abbreviations like RTA, DHA, DED""",
 ]
 
 
+# =============================================================================
+# WEALTH PORTFOLIO / DUCKDB DATA AGENT EXAMPLES
+# =============================================================================
+
+WEALTH_SIMPLE_EXAMPLES = [
+    {
+        "name": "List All Clients",
+        "agent": "data_agent",
+        "query": "Show me all clients in the database",
+        "expected_tools": ["get_relevant_schema", "analyze_query_complexity", "generate_sql", "validate_sql", "execute_sql"],
+        "description": "Simple query to list all clients"
+    },
+    {
+        "name": "Active Portfolios",
+        "agent": "data_agent",
+        "query": "Show me all active portfolios",
+        "expected_tools": ["get_relevant_schema", "generate_sql", "validate_sql", "execute_sql"],
+        "description": "Filter portfolios by active status"
+    },
+    {
+        "name": "Client Risk Profiles",
+        "agent": "data_agent",
+        "query": "What are the different risk profiles of our clients?",
+        "expected_tools": ["get_relevant_schema", "generate_sql", "execute_sql"],
+        "description": "Query distinct risk profiles"
+    },
+    {
+        "name": "Get Sample Assets",
+        "agent": "data_agent",
+        "query": "Show me sample data from the assets table",
+        "expected_tools": ["get_sample_data"],
+        "description": "View sample asset records"
+    },
+    {
+        "name": "Describe Transactions Table",
+        "agent": "data_agent",
+        "query": "What is the structure of the transactions table?",
+        "expected_tools": ["describe_table"],
+        "description": "Get table schema information"
+    },
+]
+
+WEALTH_MEDIUM_EXAMPLES = [
+    {
+        "name": "Clients with Portfolios",
+        "agent": "data_agent",
+        "query": "Show me all clients along with their portfolio names and currencies",
+        "expected_tools": ["get_relevant_schema", "analyze_query_complexity", "generate_sql", "validate_sql", "execute_sql"],
+        "description": "JOIN clients and portfolios tables"
+    },
+    {
+        "name": "Portfolio Holdings Summary",
+        "agent": "data_agent",
+        "query": "For each portfolio, show me the total number of different assets they hold",
+        "expected_tools": ["get_relevant_schema", "analyze_query_complexity", "generate_sql", "validate_sql", "execute_sql"],
+        "description": "Aggregate holdings by portfolio with COUNT"
+    },
+    {
+        "name": "Recent Transactions",
+        "agent": "data_agent",
+        "query": "Show me the 10 most recent transactions with client names, portfolio names, and asset symbols",
+        "expected_tools": ["get_relevant_schema", "generate_sql", "validate_sql", "execute_sql"],
+        "description": "Multi-table JOIN with ORDER BY and LIMIT"
+    },
+    {
+        "name": "Assets by Type",
+        "agent": "data_agent",
+        "query": "How many assets do we have of each type (Equity, ETF, Crypto)?",
+        "expected_tools": ["get_relevant_schema", "generate_sql", "execute_sql"],
+        "description": "GROUP BY with COUNT aggregation"
+    },
+    {
+        "name": "Client Transaction Activity",
+        "agent": "data_agent",
+        "query": "Which clients have made transactions, and how many transactions has each client made?",
+        "expected_tools": ["get_relevant_schema", "analyze_query_complexity", "generate_sql", "validate_sql", "execute_sql"],
+        "description": "JOIN with aggregation and GROUP BY"
+    },
+    {
+        "name": "Holdings with Asset Details",
+        "agent": "data_agent",
+        "query": "Show current holdings with asset symbols, names, quantities, and average cost",
+        "expected_tools": ["get_relevant_schema", "generate_sql", "validate_sql", "execute_sql"],
+        "description": "JOIN holdings with assets table"
+    },
+]
+
+WEALTH_COMPLEX_EXAMPLES = [
+    {
+        "name": "Portfolio Valuation Analysis",
+        "agent": "data_agent",
+        "query": """Calculate the total value of each portfolio based on current holdings.
+Show client name, portfolio name, base currency, and total portfolio value (quantity * average cost).
+Order by total value descending.""",
+        "expected_tools": ["get_relevant_schema", "analyze_query_complexity", "generate_sql", "validate_sql", "execute_sql", "explain_sql"],
+        "description": "Complex query with CTE, multiple JOINs, and aggregation"
+    },
+    {
+        "name": "Client Portfolio Diversification",
+        "agent": "data_agent",
+        "query": """For each client, show:
+1. Number of portfolios they own
+2. Total number of unique assets across all their portfolios
+3. Number of different asset types (Equity, ETF, Crypto) they hold
+Group by client and order by number of assets descending.""",
+        "expected_tools": ["get_relevant_schema", "analyze_query_complexity", "generate_sql", "validate_sql", "execute_sql"],
+        "description": "Multi-level aggregation with multiple JOINs and CTEs"
+    },
+    {
+        "name": "Trading Activity Report",
+        "agent": "data_agent",
+        "query": """Generate a trading activity report showing:
+- Client name
+- Total number of buy transactions
+- Total number of sell transactions
+- Total transaction count
+- Most frequently traded asset symbol
+Only include clients with more than 5 transactions. Order by total transactions descending.""",
+        "expected_tools": ["get_relevant_schema", "analyze_query_complexity", "generate_sql", "validate_sql", "execute_sql"],
+        "description": "Complex aggregation with conditional counts and filtering"
+    },
+    {
+        "name": "Top Holdings by Portfolio",
+        "agent": "data_agent",
+        "query": """For each portfolio, identify the top 3 holdings by total value (quantity * avg_cost).
+Show portfolio name, asset symbol, asset name, quantity, average cost, and total value.
+Use a window function or CTE to rank holdings within each portfolio.""",
+        "expected_tools": ["get_relevant_schema", "analyze_query_complexity", "generate_sql", "validate_sql", "execute_sql"],
+        "description": "Window functions or CTEs with ranking"
+    },
+    {
+        "name": "Risk Profile Distribution Analysis",
+        "agent": "data_agent",
+        "query": """Analyze the distribution of clients by risk profile and show:
+1. Risk profile category
+2. Number of clients in each category
+3. Number of portfolios managed by clients in each category
+4. Average portfolio value per risk profile
+Include KYC approved clients only. Order by risk profile.""",
+        "expected_tools": ["get_relevant_schema", "analyze_query_complexity", "generate_sql", "validate_sql", "execute_sql"],
+        "description": "Multi-table JOIN with multiple aggregations and filtering"
+    },
+    {
+        "name": "Asset Allocation by Client",
+        "agent": "data_agent",
+        "query": """Create a comprehensive asset allocation report showing:
+For client 'Anuj Singhal':
+- Asset type breakdown (percentage of total portfolio value by asset type)
+- Top 5 holdings by value
+- Total portfolio value
+- Number of different assets held
+
+Use CTEs to organize the calculation logic.""",
+        "expected_tools": ["get_relevant_schema", "analyze_query_complexity", "generate_sql", "validate_sql", "execute_sql", "explain_sql"],
+        "description": "Complex CTE-based query with percentage calculations"
+    },
+    {
+        "name": "Transaction Volume Trends",
+        "agent": "data_agent",
+        "query": """Analyze transaction patterns:
+1. Total transaction volume by month (count of transactions)
+2. Total value traded by month (sum of quantity * price)
+3. Buy vs Sell ratio for each month
+Show results for the most recent 6 months of data.""",
+        "expected_tools": ["get_relevant_schema", "analyze_query_complexity", "generate_sql", "validate_sql", "execute_sql"],
+        "description": "Time-based analysis with date functions and aggregations"
+    },
+    {
+        "name": "Comprehensive Client Summary",
+        "agent": "data_agent",
+        "query": """Create a comprehensive summary for each client showing:
+- Client details (name, country, risk profile, KYC status)
+- Number of portfolios owned
+- Total assets across all portfolios
+- Total portfolio value (sum of all holdings value)
+- Most recent transaction date
+- Most frequently held asset type
+
+Order by total portfolio value descending. Use multiple CTEs to organize the logic.""",
+        "expected_tools": ["get_relevant_schema", "analyze_query_complexity", "generate_sql", "validate_sql", "execute_sql", "explain_sql"],
+        "description": "Master query with multiple CTEs combining all aspects"
+    },
+]
+
+
 def print_examples():
     """Print all examples in a formatted way."""
     
@@ -825,6 +1010,9 @@ def print_examples():
         ("🏷️ NAME MATCHING SIMPLE", NAME_MATCHING_SIMPLE_EXAMPLES),
         ("🏷️ NAME MATCHING MEDIUM", NAME_MATCHING_MEDIUM_EXAMPLES),
         ("🏷️ NAME MATCHING COMPLEX", NAME_MATCHING_COMPLEX_EXAMPLES),
+        ("💼 WEALTH SIMPLE", WEALTH_SIMPLE_EXAMPLES),
+        ("💼 WEALTH MEDIUM", WEALTH_MEDIUM_EXAMPLES),
+        ("💼 WEALTH COMPLEX", WEALTH_COMPLEX_EXAMPLES),
     ]
     
     for category_name, examples in all_categories:
@@ -843,19 +1031,22 @@ def print_examples():
 def get_example_by_name(name: str) -> dict:
     """Get a specific example by name."""
     all_examples = (
-        SIMPLE_EXAMPLES + 
-        MEDIUM_EXAMPLES + 
-        COMPLEX_EXAMPLES + 
-        EDGE_CASES + 
+        SIMPLE_EXAMPLES +
+        MEDIUM_EXAMPLES +
+        COMPLEX_EXAMPLES +
+        EDGE_CASES +
         CONVERSATIONAL_EXAMPLES +
         SQL_SIMPLE_EXAMPLES +
         SQL_MEDIUM_EXAMPLES +
         SQL_COMPLEX_EXAMPLES +
         NAME_MATCHING_SIMPLE_EXAMPLES +
         NAME_MATCHING_MEDIUM_EXAMPLES +
-        NAME_MATCHING_COMPLEX_EXAMPLES
+        NAME_MATCHING_COMPLEX_EXAMPLES +
+        WEALTH_SIMPLE_EXAMPLES +
+        WEALTH_MEDIUM_EXAMPLES +
+        WEALTH_COMPLEX_EXAMPLES
     )
-    
+
     for example in all_examples:
         if example['name'].lower() == name.lower():
             return example
@@ -865,38 +1056,44 @@ def get_example_by_name(name: str) -> dict:
 def get_examples_by_agent(agent_name: str) -> list:
     """Get all examples for a specific agent."""
     all_examples = (
-        SIMPLE_EXAMPLES + 
-        MEDIUM_EXAMPLES + 
-        COMPLEX_EXAMPLES + 
-        EDGE_CASES + 
+        SIMPLE_EXAMPLES +
+        MEDIUM_EXAMPLES +
+        COMPLEX_EXAMPLES +
+        EDGE_CASES +
         CONVERSATIONAL_EXAMPLES +
         SQL_SIMPLE_EXAMPLES +
         SQL_MEDIUM_EXAMPLES +
         SQL_COMPLEX_EXAMPLES +
         NAME_MATCHING_SIMPLE_EXAMPLES +
         NAME_MATCHING_MEDIUM_EXAMPLES +
-        NAME_MATCHING_COMPLEX_EXAMPLES
+        NAME_MATCHING_COMPLEX_EXAMPLES +
+        WEALTH_SIMPLE_EXAMPLES +
+        WEALTH_MEDIUM_EXAMPLES +
+        WEALTH_COMPLEX_EXAMPLES
     )
-    
+
     return [ex for ex in all_examples if ex['agent'] == agent_name]
 
 
 def get_examples_by_tool(tool_name: str) -> list:
     """Get all examples that use a specific tool."""
     all_examples = (
-        SIMPLE_EXAMPLES + 
-        MEDIUM_EXAMPLES + 
-        COMPLEX_EXAMPLES + 
-        EDGE_CASES + 
+        SIMPLE_EXAMPLES +
+        MEDIUM_EXAMPLES +
+        COMPLEX_EXAMPLES +
+        EDGE_CASES +
         CONVERSATIONAL_EXAMPLES +
         SQL_SIMPLE_EXAMPLES +
         SQL_MEDIUM_EXAMPLES +
         SQL_COMPLEX_EXAMPLES +
         NAME_MATCHING_SIMPLE_EXAMPLES +
         NAME_MATCHING_MEDIUM_EXAMPLES +
-        NAME_MATCHING_COMPLEX_EXAMPLES
+        NAME_MATCHING_COMPLEX_EXAMPLES +
+        WEALTH_SIMPLE_EXAMPLES +
+        WEALTH_MEDIUM_EXAMPLES +
+        WEALTH_COMPLEX_EXAMPLES
     )
-    
+
     return [ex for ex in all_examples if tool_name in ex['expected_tools']]
 
 
