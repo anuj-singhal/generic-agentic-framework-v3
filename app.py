@@ -24,6 +24,14 @@ from openai import OpenAI
 import duckdb
 import pandas as pd
 
+# RAG imports
+from tools.rag_tools import (
+    get_relevant_context,
+    has_knowledge_base_content,
+    get_rag_store_state
+)
+from pages.knowledge_base import render_knowledge_base
+
 DB_PATH = "agent_ddb.db"
 
 
@@ -401,6 +409,9 @@ def initialize_session_state():
     # Total conversation counter (for tracking 5/10/15 thresholds)
     if "total_conversation_count" not in st.session_state:
         st.session_state.total_conversation_count = 0
+    # Current view/page
+    if "current_view" not in st.session_state:
+        st.session_state.current_view = "Chat"
 
 
 def render_sidebar():
@@ -408,6 +419,32 @@ def render_sidebar():
     with st.sidebar:
         # App title - compact
         st.markdown("### 🤖 AI Agent Console")
+
+        # ═══════════════════════════════════════════════════════════════
+        # NAVIGATION
+        # ═══════════════════════════════════════════════════════════════
+        st.markdown('<p class="sidebar-header">📍 Navigation</p>', unsafe_allow_html=True)
+
+        # Get RAG document count for badge
+        rag_state = get_rag_store_state()
+        rag_doc_count = len(rag_state["documents"])
+        kb_label = f"📚 Knowledge Base ({rag_doc_count})" if rag_doc_count > 0 else "📚 Knowledge Base"
+
+        current_view = st.radio(
+            "Select View",
+            ["💬 Chat", "📝 Example Queries", kb_label],
+            index=["💬 Chat", "📝 Example Queries", kb_label].index(
+                st.session_state.current_view if st.session_state.current_view in ["💬 Chat", "📝 Example Queries", kb_label] else "💬 Chat"
+            ),
+            label_visibility="collapsed",
+            key="nav_radio"
+        )
+
+        # Update session state (handle KB label with count)
+        if current_view.startswith("📚 Knowledge Base"):
+            st.session_state.current_view = "📚 Knowledge Base"
+        else:
+            st.session_state.current_view = current_view
 
         # ═══════════════════════════════════════════════════════════════
         # SESSION TOKENS (Top Priority Display)
@@ -997,10 +1034,24 @@ def run_agent_with_streaming(mission: str, trace_container, answer_placeholder):
     # Initialize token counter for current model
     token_counter = get_token_counter(st.session_state.model_name)
 
-    # Build memory context and inject into mission
+    # Build context from multiple sources
+    context_parts = []
+
+    # 1. RAG Knowledge Base Context (automatic retrieval)
+    if has_knowledge_base_content():
+        rag_context = get_relevant_context(mission, top_k=5, min_score=0.3)
+        if rag_context:
+            context_parts.append(rag_context)
+
+    # 2. Memory Context (short-term and long-term)
     memory_context = build_memory_context()
     if memory_context:
-        enhanced_mission = f"{memory_context}\n[CURRENT QUESTION]\n{mission}"
+        context_parts.append(memory_context)
+
+    # Build enhanced mission with all context
+    if context_parts:
+        all_context = "\n".join(context_parts)
+        enhanced_mission = f"{all_context}\n[CURRENT QUESTION]\n{mission}"
     else:
         enhanced_mission = mission
 
@@ -1112,129 +1163,151 @@ def main():
     # Check for API key
     if not st.session_state.api_key:
         st.warning("⚠️ Please enter your OpenAI API key in the sidebar to get started.")
-        
+
         # Show framework overview
         with st.expander("📚 About This Framework", expanded=True):
             st.markdown("""
             ### Architecture Overview
-            
+
             This framework implements an agentic AI system with three core components:
-            
+
             **1. 🧠 The Model (Brain)**
             - GPT-4o-mini as the reasoning engine
             - Processes information and makes decisions
-            
+
             **2. 🤚 Tools (Hands)**
             - Calculator, unit converter
             - Date/time operations
             - Text analysis and transformation
             - Task management
-            - Knowledge base search
-            
+            - Knowledge base (automatic RAG)
+
             **3. 🔗 Orchestration Layer (Nervous System)**
             - ReAct pattern implementation
             - LangGraph for state management
             - Think → Act → Observe loop
-            
+
             ### Available Agents
             """)
-            
+
             agents = get_available_agents()
             for name, description in agents.items():
                 st.markdown(f"- **{name.replace('_', ' ').title()}**: {description}")
-        
+
         return
-    
-    # Display chat history
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            if message.get("from_memory"):
-                st.markdown('<span class="memory-badge">📝 From Memory</span>', unsafe_allow_html=True)
-            st.markdown(message["content"])
-            if "trace" in message:
-                render_react_trace(message["trace"])
-    
-    # Chat input
-    if prompt := st.chat_input("Enter your task or question..."):
-        # Add user message to history
-        st.session_state.messages.append({"role": "user", "content": prompt})
 
-        # Display user message
-        with st.chat_message("user"):
-            st.markdown(prompt)
+    # Import pages
+    from pages.example_queries import render_example_queries
 
-        # Check for duplicate question in memory
-        cached_response = check_duplicate_question(prompt)
+    # Render content based on current view
+    current_view = st.session_state.current_view
 
-        if cached_response:
-            # Return cached response
-            with st.chat_message("assistant"):
-                final_answer = cached_response.get("response", "")
-                st.markdown(f"""
-                <div class="final-answer" style="border-color: #ff9800;">
-                    <strong>📝 From Memory</strong> <span style="font-size: 0.8rem; color: #666;">(previously answered by {cached_response.get('agent', 'agent')})</span><br><br>
-                    {final_answer}
-                </div>
-                """, unsafe_allow_html=True)
+    if current_view == "📚 Knowledge Base":
+        # Knowledge Base view
+        render_knowledge_base()
 
-                # Store in history (no trace for cached)
-                st.session_state.messages.append({
-                    "role": "assistant",
-                    "content": f"[From Memory] {final_answer}",
-                    "from_memory": True
-                })
+    elif current_view == "📝 Example Queries":
+        # Example Queries view
+        render_example_queries()
 
-                # Rerun to update display
-                st.rerun()
-        else:
-            # Run agent with real-time streaming
-            with st.chat_message("assistant"):
-                # Header showing agent is working
-                status_placeholder = st.empty()
-                status_placeholder.markdown(f"**🔄 {st.session_state.current_agent.replace('_', ' ').title()} is working...**")
+    else:
+        # Chat view (default)
+        # Show RAG status indicator if knowledge base has content
+        if has_knowledge_base_content():
+            rag_state = get_rag_store_state()
+            doc_count = len(rag_state["documents"])
+            st.info(f"📚 Knowledge Base Active: {doc_count} document(s) loaded. Relevant context will be automatically included in responses.")
 
-                # Create expander for real-time trace - starts expanded
-                with st.expander("🔍 ReAct Execution Trace (Live)", expanded=True):
-                    trace_container = st.container()
+        # Display chat history
+        for message in st.session_state.messages:
+            with st.chat_message(message["role"]):
+                if message.get("from_memory"):
+                    st.markdown('<span class="memory-badge">📝 From Memory</span>', unsafe_allow_html=True)
+                st.markdown(message["content"])
+                if "trace" in message:
+                    render_react_trace(message["trace"])
 
-                # Placeholder for the final answer
-                answer_placeholder = st.empty()
+        # Chat input
+        if prompt := st.chat_input("Enter your task or question..."):
+            # Add user message to history
+            st.session_state.messages.append({"role": "user", "content": prompt})
 
-                # Run with streaming
-                result = run_agent_with_streaming(prompt, trace_container, answer_placeholder)
-                final_answer = get_final_answer(result)
+            # Display user message
+            with st.chat_message("user"):
+                st.markdown(prompt)
 
-                # Clear the status and show final answer
-                status_placeholder.empty()
-                answer_placeholder.markdown(f"""
-                <div class="final-answer">
-                    <strong>✅ Final Answer:</strong><br><br>
-                    {final_answer}
-                </div>
-                """, unsafe_allow_html=True)
+            # Check for duplicate question in memory
+            cached_response = check_duplicate_question(prompt)
 
-                # Store in history
-                st.session_state.messages.append({
-                    "role": "assistant",
-                    "content": final_answer,
-                    "trace": result
-                })
+            if cached_response:
+                # Return cached response
+                with st.chat_message("assistant"):
+                    final_answer = cached_response.get("response", "")
+                    st.markdown(f"""
+                    <div class="final-answer" style="border-color: #ff9800;">
+                        <strong>📝 From Memory</strong> <span style="font-size: 0.8rem; color: #666;">(previously answered by {cached_response.get('agent', 'agent')})</span><br><br>
+                        {final_answer}
+                    </div>
+                    """, unsafe_allow_html=True)
 
-                # Store execution history
-                st.session_state.execution_history.append({
-                    "timestamp": datetime.now().isoformat(),
-                    "agent": st.session_state.current_agent,
-                    "mission": prompt,
-                    "result": result
-                })
+                    # Store in history (no trace for cached)
+                    st.session_state.messages.append({
+                        "role": "assistant",
+                        "content": f"[From Memory] {final_answer}",
+                        "from_memory": True
+                    })
 
-                # Store in memory for future reference
-                token_stats = result.get("token_stats", {})
-                total_tokens = token_stats.get("total_tokens", 0)
-                store_in_memory(prompt, final_answer, st.session_state.current_agent, total_tokens)
+                    # Rerun to update display
+                    st.rerun()
+            else:
+                # Run agent with real-time streaming
+                with st.chat_message("assistant"):
+                    # Header showing agent is working
+                    status_placeholder = st.empty()
+                    status_placeholder.markdown(f"**🔄 {st.session_state.current_agent.replace('_', ' ').title()} is working...**")
 
-                # Rerun to update sidebar token display
-                st.rerun()
+                    # Create expander for real-time trace - starts expanded
+                    with st.expander("🔍 ReAct Execution Trace (Live)", expanded=True):
+                        trace_container = st.container()
+
+                    # Placeholder for the final answer
+                    answer_placeholder = st.empty()
+
+                    # Run with streaming
+                    result = run_agent_with_streaming(prompt, trace_container, answer_placeholder)
+                    final_answer = get_final_answer(result)
+
+                    # Clear the status and show final answer
+                    status_placeholder.empty()
+                    answer_placeholder.markdown(f"""
+                    <div class="final-answer">
+                        <strong>✅ Final Answer:</strong><br><br>
+                        {final_answer}
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    # Store in history
+                    st.session_state.messages.append({
+                        "role": "assistant",
+                        "content": final_answer,
+                        "trace": result
+                    })
+
+                    # Store execution history
+                    st.session_state.execution_history.append({
+                        "timestamp": datetime.now().isoformat(),
+                        "agent": st.session_state.current_agent,
+                        "mission": prompt,
+                        "result": result
+                    })
+
+                    # Store in memory for future reference
+                    token_stats = result.get("token_stats", {})
+                    total_tokens = token_stats.get("total_tokens", 0)
+                    store_in_memory(prompt, final_answer, st.session_state.current_agent, total_tokens)
+
+                    # Rerun to update sidebar token display
+                    st.rerun()
 
 
 if __name__ == "__main__":

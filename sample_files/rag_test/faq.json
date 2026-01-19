@@ -1,0 +1,124 @@
+{
+  "company": "ACME Corporation",
+  "faq_version": "2024.1",
+  "last_updated": "2024-01-15",
+  "categories": [
+    {
+      "name": "Orders & Shipping",
+      "questions": [
+        {
+          "id": "OS001",
+          "question": "How long does shipping take?",
+          "answer": "Standard shipping takes 5-7 business days within the continental US. Express shipping (2-3 business days) and overnight shipping are available for an additional fee. International shipping typically takes 10-14 business days depending on the destination country."
+        },
+        {
+          "id": "OS002",
+          "question": "Can I track my order?",
+          "answer": "Yes! Once your order ships, you'll receive an email with a tracking number. You can track your package on our website by entering the tracking number in the 'Track Order' section, or directly on the carrier's website (UPS, FedEx, or USPS)."
+        },
+        {
+          "id": "OS003",
+          "question": "What is your return policy?",
+          "answer": "We offer a 30-day money-back guarantee on all products. Items must be returned in original packaging and unused condition. Refunds are processed within 5-7 business days after we receive the returned item. Shipping costs for returns are the customer's responsibility unless the item was defective."
+        },
+        {
+          "id": "OS004",
+          "question": "Do you ship internationally?",
+          "answer": "Yes, we ship to over 50 countries worldwide. International customers may be responsible for customs duties and taxes. Shipping rates and delivery times vary by destination. Some products may have shipping restrictions to certain countries."
+        },
+        {
+          "id": "OS005",
+          "question": "Can I change or cancel my order?",
+          "answer": "Orders can be modified or cancelled within 2 hours of placement. After that, our fulfillment process begins and changes cannot be guaranteed. Contact customer service immediately at orders@acmecorp.com if you need to make changes."
+        }
+      ]
+    },
+    {
+      "name": "Products & Warranty",
+      "questions": [
+        {
+          "id": "PW001",
+          "question": "What warranty do your products have?",
+          "answer": "All ACME products come with a standard 2-year manufacturer warranty covering defects in materials and workmanship. Extended warranty options (3-year, 5-year, or lifetime) are available for purchase. The warranty does not cover damage from misuse, accidents, or unauthorized modifications."
+        },
+        {
+          "id": "PW002",
+          "question": "How do I register my product for warranty?",
+          "answer": "Visit warranty.acmecorp.com and enter your product's serial number (found on the bottom or back of the device) along with your proof of purchase. Registration should be completed within 30 days of purchase to activate your warranty."
+        },
+        {
+          "id": "PW003",
+          "question": "Are replacement parts available?",
+          "answer": "Yes, we stock replacement parts for all current products and products discontinued within the last 5 years. Parts can be ordered through our website or by calling 1-800-ACME-PARTS. Installation guides and videos are available in our support section."
+        },
+        {
+          "id": "PW004",
+          "question": "What is the difference between Widget Pro and Widget Deluxe?",
+          "answer": "The Widget Pro ($149.99) features a titanium core and smart connectivity. The Widget Deluxe ($299.99) includes all Pro features plus gold plating, premium materials, a lifetime warranty (vs 2-year standard), and priority customer support."
+        }
+      ]
+    },
+    {
+      "name": "Technical Support",
+      "questions": [
+        {
+          "id": "TS001",
+          "question": "How do I reset my device to factory settings?",
+          "answer": "To perform a factory reset: 1) Power off the device, 2) Press and hold the Reset button (small hole on the back) for 10 seconds using a paperclip, 3) While holding Reset, press the Power button, 4) Release both buttons when the LED flashes blue. Warning: This will erase all settings and data."
+        },
+        {
+          "id": "TS002",
+          "question": "My device won't turn on. What should I do?",
+          "answer": "First, ensure the device is charged - connect it to power for at least 30 minutes. Try a different charging cable and adapter. If still unresponsive, perform a hard reset by holding the power button for 15 seconds. If the issue persists, contact technical support."
+        },
+        {
+          "id": "TS003",
+          "question": "How do I update the firmware?",
+          "answer": "Connect your device to WiFi. Go to Settings > System > Software Update. If an update is available, tap 'Download and Install'. Keep the device connected to power during the update. Updates typically take 5-15 minutes. Do not turn off the device during this process."
+        },
+        {
+          "id": "TS004",
+          "question": "What are the recommended operating conditions?",
+          "answer": "ACME devices are designed to operate in temperatures between 32°F and 95°F (0°C to 35°C) with humidity below 80%. Storage temperature range is -4°F to 113°F (-20°C to 45°C). Keep devices away from direct sunlight and water unless specifically rated for outdoor use."
+        }
+      ]
+    },
+    {
+      "name": "Account & Billing",
+      "questions": [
+        {
+          "id": "AB001",
+          "question": "How do I create an account?",
+          "answer": "Click 'Sign Up' on our website and enter your email address. You'll receive a verification email - click the link to set your password. You can also sign up using your Google or Apple account for faster registration."
+        },
+        {
+          "id": "AB002",
+          "question": "What payment methods do you accept?",
+          "answer": "We accept Visa, MasterCard, American Express, Discover, PayPal, Apple Pay, Google Pay, and ACME Gift Cards. For orders over $500, we also offer financing through Affirm with 0% APR for qualified customers."
+        },
+        {
+          "id": "AB003",
+          "question": "How do I update my payment information?",
+          "answer": "Log into your account and go to Account Settings > Payment Methods. You can add, edit, or remove payment methods. For security, you may need to re-enter your password when making changes to payment information."
+        },
+        {
+          "id": "AB004",
+          "question": "Do you offer business accounts?",
+          "answer": "Yes! ACME Business accounts offer volume discounts (10% off orders over $1000, 15% off orders over $5000), NET-30 payment terms, dedicated account manager, and priority support. Apply at business.acmecorp.com."
+        }
+      ]
+    }
+  ],
+  "contact": {
+    "customer_service": {
+      "phone": "1-800-ACME-HELP",
+      "email": "support@acmecorp.com",
+      "hours": "Monday-Friday 8AM-8PM EST, Saturday 9AM-5PM EST"
+    },
+    "technical_support": {
+      "phone": "1-800-ACME-TECH",
+      "email": "techsupport@acmecorp.com",
+      "hours": "24/7"
+    }
+  }
+}

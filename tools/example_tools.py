@@ -406,4 +406,6 @@ def get_all_tools():
     from tools import sql_tools
     # Import name matching tools to ensure they're registered
     from tools import name_matching_tools
+    # Import RAG tools to ensure they're registered
+    from tools import rag_tools
     return tool_registry.get_all_tools()

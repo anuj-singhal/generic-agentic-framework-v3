@@ -20,3 +20,9 @@ wikipedia>=1.4.0
 
 # Database
 duckdb>=1.0.0
+
+# RAG (Retrieval-Augmented Generation)
+faiss-cpu>=1.7.4
+pypdf>=3.0.0
+python-docx>=0.8.11
+tiktoken>=0.5.0

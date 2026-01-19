@@ -1,0 +1,116 @@
+ACME Corporation Employee Handbook - 2024 Edition
+
+CHAPTER 1: COMPANY OVERVIEW
+
+ACME Corporation was founded in 1985 by John Smith and Mary Johnson in Silicon Valley. The company
+specializes in manufacturing innovative gadgets and industrial equipment. Our headquarters is located
+at 1234 Innovation Drive, San Jose, California 95134.
+
+Our Mission: To provide cutting-edge solutions that improve everyday life while maintaining the
+highest standards of quality and customer satisfaction.
+
+Our Values:
+- Innovation: We constantly push the boundaries of what's possible
+- Integrity: We conduct business with honesty and transparency
+- Excellence: We strive for the highest quality in everything we do
+- Teamwork: We believe in collaboration and mutual respect
+
+CHAPTER 2: EMPLOYMENT POLICIES
+
+2.1 Working Hours
+Standard working hours are Monday through Friday, 9:00 AM to 5:00 PM. The company offers flexible
+working arrangements including:
+- Flexible start times between 7:00 AM and 10:00 AM
+- Remote work options (up to 3 days per week with manager approval)
+- Compressed work weeks (4x10 schedule available for eligible positions)
+
+2.2 Paid Time Off (PTO)
+- New employees receive 15 days of PTO per year
+- After 3 years: 20 days per year
+- After 5 years: 25 days per year
+- After 10 years: 30 days per year
+
+PTO can be used for vacation, personal days, or sick leave. Unused PTO up to 5 days can be carried
+over to the next year.
+
+2.3 Holidays
+ACME Corporation observes the following paid holidays:
+- New Year's Day
+- Martin Luther King Jr. Day
+- Presidents' Day
+- Memorial Day
+- Independence Day
+- Labor Day
+- Thanksgiving Day and the day after
+- Christmas Eve and Christmas Day
+
+2.4 Benefits
+Full-time employees are eligible for:
+- Health insurance (medical, dental, vision) - company pays 80% of premiums
+- 401(k) retirement plan with 4% company match
+- Life insurance (2x annual salary)
+- Short-term and long-term disability insurance
+- Employee Assistance Program (EAP)
+- Tuition reimbursement up to $5,000 per year
+- Gym membership subsidy ($50/month)
+
+CHAPTER 3: EXPENSE POLICY
+
+3.1 Travel Expenses
+- Airfare: Economy class for flights under 6 hours, business class for longer flights
+- Hotels: Up to $200/night domestic, $300/night international
+- Meals: Up to $75/day domestic, $100/day international
+- Rental cars: Compact or intermediate class unless business need requires larger
+
+3.2 Expense Reporting
+All expenses must be submitted within 30 days of incurring them. Receipts are required for all
+expenses over $25. Expense reports are submitted through the ExpenseTrack system and require
+manager approval for amounts over $500.
+
+3.3 Corporate Credit Cards
+Corporate credit cards are available for employees who travel frequently (more than 4 trips per
+year). Monthly statements must be reconciled within 15 days of receipt.
+
+CHAPTER 4: IT AND SECURITY POLICIES
+
+4.1 Password Requirements
+- Minimum 12 characters
+- Must include uppercase, lowercase, numbers, and special characters
+- Passwords must be changed every 90 days
+- Cannot reuse last 10 passwords
+
+4.2 Data Classification
+- Public: Information that can be freely shared
+- Internal: For employees only, not for external distribution
+- Confidential: Sensitive business information, restricted access
+- Restricted: Highly sensitive data (PII, financial data), strictly controlled
+
+4.3 Remote Access
+VPN is required for all remote access to company systems. Two-factor authentication is mandatory.
+Company-issued laptops must have full disk encryption enabled.
+
+CHAPTER 5: PERFORMANCE MANAGEMENT
+
+5.1 Performance Reviews
+- Annual performance reviews conducted in Q1 each year
+- Mid-year check-ins in July
+- Continuous feedback encouraged through our Feedback360 platform
+
+5.2 Rating Scale
+- Exceeds Expectations: Consistently delivers exceptional results
+- Meets Expectations: Reliably achieves goals and objectives
+- Needs Improvement: Performance gaps that require attention
+- Unsatisfactory: Significant performance issues
+
+5.3 Compensation
+Annual merit increases are based on performance ratings and market adjustments. The typical range
+is 2-5% for "Meets Expectations" and 5-10% for "Exceeds Expectations".
+
+CONTACT INFORMATION
+
+Human Resources Department
+Email: hr@acmecorp.com
+Phone: (408) 555-1234
+Office: Building A, 2nd Floor
+
+For emergencies outside business hours, contact the HR hotline at (408) 555-9999.

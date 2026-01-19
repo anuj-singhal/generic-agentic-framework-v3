@@ -1,0 +1,21 @@
+product_id,name,category,description,price,currency,stock_quantity,supplier,weight_kg,dimensions_cm
+PROD001,Super Widget Pro,Widgets,Advanced widget with titanium core and smart connectivity features,149.99,USD,250,TechSupply Inc,0.5,10x8x5
+PROD002,Basic Widget,Widgets,Entry-level widget perfect for beginners,29.99,USD,1000,TechSupply Inc,0.2,8x6x3
+PROD003,Widget Deluxe Edition,Widgets,Premium widget with gold plating and lifetime warranty,299.99,USD,50,LuxuryParts Co,0.8,12x10x6
+PROD004,Industrial Gadget X1,Gadgets,Heavy-duty gadget for industrial applications with IP68 rating,499.99,USD,75,IndustrialTech,2.5,30x20x15
+PROD005,Portable Gadget Mini,Gadgets,Compact gadget that fits in your pocket with 24-hour battery life,79.99,USD,500,TechSupply Inc,0.15,5x3x1
+PROD006,Smart Gadget Hub,Gadgets,Central hub connecting up to 50 smart devices with voice control,199.99,USD,200,SmartHome Solutions,0.6,15x15x5
+PROD007,Precision Tool Set,Tools,Professional 50-piece precision tool set with carrying case,89.99,USD,300,ToolMaster Corp,1.2,25x20x8
+PROD008,Power Tool Bundle,Tools,Complete power tool bundle including drill and saw with batteries,349.99,USD,100,PowerEquip Ltd,5.0,40x30x25
+PROD009,Maintenance Kit,Tools,Essential maintenance kit for widget and gadget repair,49.99,USD,450,TechSupply Inc,0.8,20x15x10
+PROD010,Safety Helmet Pro,Safety,Industrial safety helmet with built-in LED light and communication system,129.99,USD,180,SafetyFirst Inc,0.4,25x22x18
+PROD011,Safety Goggles Elite,Safety,Anti-fog safety goggles with UV protection and adjustable strap,34.99,USD,600,SafetyFirst Inc,0.1,18x8x6
+PROD012,High-Vis Vest,Safety,Reflective high-visibility vest meeting ANSI Class 3 standards,24.99,USD,800,SafetyFirst Inc,0.2,flat packed
+PROD013,Connector Cable 2m,Accessories,Universal connector cable compatible with all ACME widgets,14.99,USD,2000,CableCo,0.1,200x2x2
+PROD014,Connector Cable 5m,Accessories,Extended length universal connector cable,24.99,USD,1500,CableCo,0.2,500x2x2
+PROD015,Wireless Adapter,Accessories,Bluetooth 5.0 wireless adapter for legacy gadgets,39.99,USD,400,TechSupply Inc,0.05,4x2x1
+PROD016,Carrying Case Large,Accessories,Durable carrying case fitting most gadgets with foam padding,59.99,USD,250,CaseMakers,0.8,35x25x15
+PROD017,Battery Pack Standard,Power,Rechargeable battery pack 5000mAh compatible with portable gadgets,29.99,USD,700,PowerCell Inc,0.15,10x6x2
+PROD018,Battery Pack Extended,Power,High-capacity battery pack 15000mAh with fast charging,59.99,USD,350,PowerCell Inc,0.3,12x8x3
+PROD019,Solar Charger Panel,Power,Portable solar panel 20W for outdoor charging,89.99,USD,150,SolarTech,0.6,30x20x2
+PROD020,Wall Charger Dual,Power,Dual USB wall charger with 30W fast charging capability,19.99,USD,1200,PowerCell Inc,0.08,6x4x3

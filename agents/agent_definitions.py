@@ -27,17 +27,17 @@ class AgentDefinition:
     def get_tools(self) -> List[BaseTool]:
         """Get all tools available to this agent."""
         tools = []
-        
+
         # Get tools by category
         for category in self.tool_categories:
             tools.extend(tool_registry.get_tools_by_category(category))
-        
+
         # Get specific tools by name
         for tool_name in self.specific_tools:
             tool = tool_registry.get_tool(tool_name)
             if tool and tool not in tools:
                 tools.append(tool)
-        
+
         return tools
 
 
