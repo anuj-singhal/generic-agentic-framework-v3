@@ -17,6 +17,7 @@ from core.config import get_config, FrameworkConfig, ModelConfig
 from core.tools_base import tool_registry
 from tools.example_tools import get_all_tools
 from agents.agent_definitions import get_available_agents, create_agent, AgentFactory
+from core.token_counter import get_token_counter
 
 # DuckDB imports for database explorer
 import duckdb
@@ -217,6 +218,79 @@ st.markdown("""
         margin: 15px 0;
         border-radius: 8px;
     }
+    /* Session Tokens Card */
+    .token-card {
+        background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+        border: 1px solid #90caf9;
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin: 8px 0 16px 0;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+    .token-card-header {
+        color: #1565c0;
+        font-size: 0.75rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 10px;
+    }
+    .token-stats-row {
+        display: flex;
+        justify-content: space-between;
+        text-align: center;
+    }
+    .token-stat {
+        flex: 1;
+        padding: 4px;
+    }
+    .token-value {
+        font-size: 1.2rem;
+        font-weight: 700;
+        margin-bottom: 2px;
+    }
+    .token-value-total {
+        color: #1565c0;
+    }
+    .token-value-prompt {
+        color: #2e7d32;
+    }
+    .token-value-output {
+        color: #7b1fa2;
+    }
+    .token-label {
+        font-size: 0.65rem;
+        color: #546e7a;
+        text-transform: capitalize;
+    }
+    /* Message token badge */
+    .msg-token-badge {
+        display: inline-block;
+        background: rgba(25, 118, 210, 0.1);
+        color: #1565c0;
+        font-size: 0.65rem;
+        padding: 2px 6px;
+        border-radius: 10px;
+        margin-left: 8px;
+    }
+    /* Memory badge */
+    .memory-badge {
+        display: inline-block;
+        background: rgba(255, 152, 0, 0.15);
+        color: #e65100;
+        font-size: 0.7rem;
+        padding: 3px 8px;
+        border-radius: 12px;
+        margin-bottom: 8px;
+    }
+    /* Memory answer box */
+    .memory-answer {
+        background-color: #fff8e1;
+        border: 2px solid #ff9800;
+        padding: 15px;
+        margin: 15px 0;
+        border-radius: 8px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -302,6 +376,22 @@ def initialize_session_state():
         st.session_state.show_schema_modal = False
     if "selected_table" not in st.session_state:
         st.session_state.selected_table = None
+    # Token tracking
+    if "total_tokens" not in st.session_state:
+        st.session_state.total_tokens = 0  # Cumulative total
+    if "last_input_tokens" not in st.session_state:
+        st.session_state.last_input_tokens = 0
+    if "last_output_tokens" not in st.session_state:
+        st.session_state.last_output_tokens = 0
+    if "last_total_tokens" not in st.session_state:
+        st.session_state.last_total_tokens = 0
+    if "needs_rerun" not in st.session_state:
+        st.session_state.needs_rerun = False
+    # Short-term memory (last 5 conversations)
+    if "conversation_memory" not in st.session_state:
+        st.session_state.conversation_memory = []  # List of {query, response, agent, tokens, timestamp}
+    if "memory_tokens" not in st.session_state:
+        st.session_state.memory_tokens = 0
 
 
 def render_sidebar():
@@ -309,6 +399,43 @@ def render_sidebar():
     with st.sidebar:
         # App title - compact
         st.markdown("### 🤖 AI Agent Console")
+
+        # ═══════════════════════════════════════════════════════════════
+        # SESSION TOKENS (Top Priority Display)
+        # ═══════════════════════════════════════════════════════════════
+        memory_count = len(st.session_state.conversation_memory)
+        st.markdown(f"""
+        <div class="token-card">
+            <div class="token-card-header">SESSION TOKENS</div>
+            <div class="token-stats-row" style="margin-bottom: 8px;">
+                <div class="token-stat" style="flex: 1;">
+                    <div class="token-value token-value-total" style="font-size: 1.4rem;">{st.session_state.total_tokens:,}</div>
+                    <div class="token-label">Total</div>
+                </div>
+                <div class="token-stat" style="flex: 1;">
+                    <div class="token-value" style="color: #ff9800; font-size: 1.4rem;">{st.session_state.memory_tokens:,}</div>
+                    <div class="token-label">Memory ({memory_count}/5)</div>
+                </div>
+            </div>
+            <div style="border-top: 1px solid #90caf9; padding-top: 8px; margin-top: 4px;">
+                <div style="font-size: 0.65rem; color: #546e7a; margin-bottom: 6px; text-transform: uppercase;">Last Conversation</div>
+                <div class="token-stats-row">
+                    <div class="token-stat">
+                        <div class="token-value token-value-prompt">{st.session_state.last_input_tokens:,}</div>
+                        <div class="token-label">Input</div>
+                    </div>
+                    <div class="token-stat">
+                        <div class="token-value token-value-output">{st.session_state.last_output_tokens:,}</div>
+                        <div class="token-label">Output</div>
+                    </div>
+                    <div class="token-stat">
+                        <div class="token-value" style="color: #1565c0;">{st.session_state.last_total_tokens:,}</div>
+                        <div class="token-label">Total</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
         # ═══════════════════════════════════════════════════════════════
         # DATABASE EXPLORER (Top Priority)
@@ -416,52 +543,96 @@ def render_sidebar():
         # ACTIONS
         # ═══════════════════════════════════════════════════════════════
         st.markdown("---")
-        if st.button("🗑️ Clear Chat", use_container_width=True):
-            st.session_state.messages = []
-            st.session_state.execution_history = []
-            st.rerun()
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🗑️ Clear Chat", use_container_width=True):
+                st.session_state.messages = []
+                st.session_state.execution_history = []
+                # Reset token counts
+                st.session_state.total_tokens = 0
+                st.session_state.last_input_tokens = 0
+                st.session_state.last_output_tokens = 0
+                st.session_state.last_total_tokens = 0
+                st.rerun()
+        with col2:
+            if st.button("🧠 Clear Memory", use_container_width=True):
+                st.session_state.conversation_memory = []
+                st.session_state.memory_tokens = 0
+                st.rerun()
 
 
 def render_react_trace(execution_data: Dict[str, Any]):
     """Render the ReAct execution trace."""
     messages = execution_data.get("messages", [])
-    
-    with st.expander("🔍 View ReAct Execution Trace", expanded=False):
+    token_stats = execution_data.get("token_stats", {})
+    message_tokens = token_stats.get("message_tokens", [])
+
+    # Token counter for messages without pre-calculated tokens
+    token_counter = get_token_counter(st.session_state.model_name)
+
+    # Show execution token summary
+    total_tokens = token_stats.get("total_tokens", 0)
+    input_tokens = token_stats.get("prompt_tokens", 0)
+    output_tokens = token_stats.get("completion_tokens", 0)
+
+    trace_header = "🔍 View ReAct Execution Trace"
+    if total_tokens > 0:
+        trace_header += f" ({total_tokens:,} tokens)"
+
+    with st.expander(trace_header, expanded=False):
+        # Show token summary at top if available
+        if total_tokens > 0:
+            st.markdown(f"""
+            <div style="background: #f5f5f5; padding: 8px 12px; border-radius: 4px; margin-bottom: 12px; font-size: 0.8rem;">
+                <strong>Tokens:</strong> {total_tokens:,} total
+                (<span style="color: #2e7d32;">{input_tokens:,} input</span> |
+                <span style="color: #7b1fa2;">{output_tokens:,} output</span>)
+            </div>
+            """, unsafe_allow_html=True)
+
         for i, msg in enumerate(messages):
             msg_type = type(msg).__name__
-            
+
+            # Get token count from pre-calculated or calculate now
+            if i < len(message_tokens):
+                token_count = message_tokens[i].get("tokens", 0)
+            else:
+                token_count = token_counter.count_message(msg)
+
+            token_badge = f'<span class="msg-token-badge">{token_count} tokens</span>'
+
             if msg_type == "HumanMessage":
                 st.markdown(f"""
                 <div class="thought-box">
-                    <strong>📝 Mission:</strong><br>
+                    <strong>📝 Mission:</strong>{token_badge}<br>
                     {msg.content[:500]}{'...' if len(msg.content) > 500 else ''}
                 </div>
                 """, unsafe_allow_html=True)
-            
+
             elif msg_type == "AIMessage":
                 content = msg.content if msg.content else "[Tool Call]"
-                
+
                 # Check for tool calls
                 if hasattr(msg, "tool_calls") and msg.tool_calls:
                     for tool_call in msg.tool_calls:
                         st.markdown(f"""
                         <div class="action-box">
-                            <strong>🛠️ Action:</strong> {tool_call['name']}<br>
+                            <strong>🛠️ Action:</strong> {tool_call['name']}{token_badge}<br>
                             <strong>Input:</strong> <code>{json.dumps(tool_call['args'], indent=2)}</code>
                         </div>
                         """, unsafe_allow_html=True)
                 else:
                     st.markdown(f"""
                     <div class="thought-box">
-                        <strong>💭 Thought/Response:</strong><br>
+                        <strong>💭 Thought/Response:</strong>{token_badge}<br>
                         {content[:500]}{'...' if len(content) > 500 else ''}
                     </div>
                     """, unsafe_allow_html=True)
-            
+
             elif msg_type == "ToolMessage":
                 st.markdown(f"""
                 <div class="observation-box">
-                    <strong>👁️ Observation:</strong><br>
+                    <strong>👁️ Observation:</strong>{token_badge}<br>
                     {msg.content[:500]}{'...' if len(msg.content) > 500 else ''}
                 </div>
                 """, unsafe_allow_html=True)
@@ -551,14 +722,21 @@ def create_agent_orchestrator():
     return orchestrator
 
 
-def render_streaming_trace_item(msg, container):
+def render_streaming_trace_item(msg, container, token_count: int = None):
     """Render a single trace item during streaming."""
     msg_type = type(msg).__name__
+
+    # Get token count if not provided
+    if token_count is None:
+        token_counter = get_token_counter(st.session_state.model_name)
+        token_count = token_counter.count_message(msg)
+
+    token_badge = f'<span class="msg-token-badge">{token_count} tokens</span>'
 
     if msg_type == "HumanMessage":
         container.markdown(f"""
         <div class="thought-box">
-            <strong>📝 Mission:</strong><br>
+            <strong>📝 Mission:</strong>{token_badge}<br>
             {msg.content[:500]}{'...' if len(msg.content) > 500 else ''}
         </div>
         """, unsafe_allow_html=True)
@@ -571,14 +749,14 @@ def render_streaming_trace_item(msg, container):
             for tool_call in msg.tool_calls:
                 container.markdown(f"""
                 <div class="action-box">
-                    <strong>🛠️ Action:</strong> {tool_call['name']}<br>
+                    <strong>🛠️ Action:</strong> {tool_call['name']}{token_badge}<br>
                     <strong>Input:</strong> <code>{json.dumps(tool_call['args'], indent=2)}</code>
                 </div>
                 """, unsafe_allow_html=True)
         elif content:
             container.markdown(f"""
             <div class="thought-box">
-                <strong>💭 Thought/Response:</strong><br>
+                <strong>💭 Thought/Response:</strong>{token_badge}<br>
                 {content[:500]}{'...' if len(content) > 500 else ''}
             </div>
             """, unsafe_allow_html=True)
@@ -586,10 +764,82 @@ def render_streaming_trace_item(msg, container):
     elif msg_type == "ToolMessage":
         container.markdown(f"""
         <div class="observation-box">
-            <strong>👁️ Observation:</strong><br>
+            <strong>👁️ Observation:</strong>{token_badge}<br>
             {msg.content[:500]}{'...' if len(msg.content) > 500 else ''}
         </div>
         """, unsafe_allow_html=True)
+
+
+def calculate_memory_tokens():
+    """Calculate total tokens used by conversation memory."""
+    token_counter = get_token_counter(st.session_state.model_name)
+    total = 0
+    for conv in st.session_state.conversation_memory:
+        total += token_counter.count_text(conv.get("query", ""))
+        total += token_counter.count_text(conv.get("response", ""))
+    return total
+
+
+def build_memory_context() -> str:
+    """Build a context string from conversation memory for the agent."""
+    if not st.session_state.conversation_memory:
+        return ""
+
+    memory_parts = ["[CONVERSATION MEMORY - Use this context for follow-up questions]\n"]
+    for i, conv in enumerate(st.session_state.conversation_memory, 1):
+        memory_parts.append(f"--- Conversation {i} (Agent: {conv.get('agent', 'unknown')}) ---")
+        memory_parts.append(f"User: {conv.get('query', '')}")
+        # Truncate long responses to save tokens
+        response = conv.get('response', '')
+        if len(response) > 500:
+            response = response[:500] + "..."
+        memory_parts.append(f"Assistant: {response}")
+        memory_parts.append("")
+
+    memory_parts.append("[END OF MEMORY]\n")
+    return "\n".join(memory_parts)
+
+
+def check_duplicate_question(query: str) -> dict | None:
+    """Check if a similar question exists in memory and return the cached response."""
+    if not st.session_state.conversation_memory:
+        return None
+
+    # Normalize the query for comparison
+    query_lower = query.lower().strip()
+
+    for conv in st.session_state.conversation_memory:
+        stored_query = conv.get("query", "").lower().strip()
+        # Check for exact or very similar match
+        if query_lower == stored_query:
+            return conv
+        # Check for high similarity (simple substring check)
+        if len(query_lower) > 10 and len(stored_query) > 10:
+            if query_lower in stored_query or stored_query in query_lower:
+                return conv
+
+    return None
+
+
+def store_in_memory(query: str, response: str, agent: str, tokens: int):
+    """Store a conversation in short-term memory (sliding window of last 5 conversations)."""
+    conversation = {
+        "query": query,
+        "response": response,
+        "agent": agent,
+        "tokens": tokens,
+        "timestamp": datetime.now().isoformat()
+    }
+
+    # Remove oldest conversation if at max capacity (sliding window)
+    while len(st.session_state.conversation_memory) >= 5:
+        st.session_state.conversation_memory.pop(0)  # Remove first/oldest
+
+    # Add new conversation to memory
+    st.session_state.conversation_memory.append(conversation)
+
+    # Update memory tokens count
+    st.session_state.memory_tokens = calculate_memory_tokens()
 
 
 def run_agent_with_streaming(mission: str, trace_container, answer_placeholder):
@@ -599,13 +849,28 @@ def run_agent_with_streaming(mission: str, trace_container, answer_placeholder):
     if orchestrator is None:
         return {"error": f"Agent '{st.session_state.current_agent}' not found"}
 
+    # Initialize token counter for current model
+    token_counter = get_token_counter(st.session_state.model_name)
+
+    # Build memory context and inject into mission
+    memory_context = build_memory_context()
+    if memory_context:
+        enhanced_mission = f"{memory_context}\n[CURRENT QUESTION]\n{mission}"
+    else:
+        enhanced_mission = mission
+
+    # Track tokens for this execution
+    execution_prompt_tokens = 0
+    execution_completion_tokens = 0
+    message_tokens = []  # Track tokens per message
+
     # Track messages we've already displayed
     displayed_message_count = 0
     final_state = None
     all_messages = []
 
     # Stream the execution
-    for state_update in orchestrator.stream(mission):
+    for state_update in orchestrator.stream(enhanced_mission):
         # state_update is a dict with node name as key
         for node_name, node_state in state_update.items():
             if node_name == "__end__":
@@ -614,14 +879,37 @@ def run_agent_with_streaming(mission: str, trace_container, answer_placeholder):
             # Get messages from this update
             messages = node_state.get("messages", [])
 
-            # Display new messages
+            # Display new messages and count tokens
             for msg in messages:
                 all_messages.append(msg)
+
+                # Count tokens for this message
+                msg_tokens = token_counter.count_message(msg)
+                msg_type = type(msg).__name__
+
+                # Categorize: AI messages are completion, others are prompt
+                if msg_type == "AIMessage":
+                    execution_completion_tokens += msg_tokens
+                else:
+                    execution_prompt_tokens += msg_tokens
+
+                message_tokens.append({
+                    "type": msg_type,
+                    "tokens": msg_tokens
+                })
+
                 render_streaming_trace_item(msg, trace_container)
                 displayed_message_count += 1
 
             # Update the final state
             final_state = node_state
+
+    # Update session token totals
+    execution_total = execution_prompt_tokens + execution_completion_tokens
+    st.session_state.total_tokens += execution_total
+    st.session_state.last_input_tokens = execution_prompt_tokens
+    st.session_state.last_output_tokens = execution_completion_tokens
+    st.session_state.last_total_tokens = execution_total
 
     # Build the complete result
     result = {
@@ -634,7 +922,13 @@ def run_agent_with_streaming(mission: str, trace_container, answer_placeholder):
         "is_complete": True,
         "final_answer": final_state.get("final_answer") if final_state else None,
         "error": final_state.get("error") if final_state else None,
-        "tool_calls_made": final_state.get("tool_calls_made", 0) if final_state else 0
+        "tool_calls_made": final_state.get("tool_calls_made", 0) if final_state else 0,
+        "token_stats": {
+            "prompt_tokens": execution_prompt_tokens,
+            "completion_tokens": execution_completion_tokens,
+            "total_tokens": execution_prompt_tokens + execution_completion_tokens,
+            "message_tokens": message_tokens
+        }
     }
 
     return result
@@ -709,6 +1003,8 @@ def main():
     # Display chat history
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
+            if message.get("from_memory"):
+                st.markdown('<span class="memory-badge">📝 From Memory</span>', unsafe_allow_html=True)
             st.markdown(message["content"])
             if "trace" in message:
                 render_react_trace(message["trace"])
@@ -722,46 +1018,78 @@ def main():
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        # Run agent with real-time streaming
-        with st.chat_message("assistant"):
-            # Header showing agent is working
-            status_placeholder = st.empty()
-            status_placeholder.markdown(f"**🔄 {st.session_state.current_agent.replace('_', ' ').title()} is working...**")
+        # Check for duplicate question in memory
+        cached_response = check_duplicate_question(prompt)
 
-            # Create expander for real-time trace - starts expanded
-            with st.expander("🔍 ReAct Execution Trace (Live)", expanded=True):
-                trace_container = st.container()
+        if cached_response:
+            # Return cached response
+            with st.chat_message("assistant"):
+                final_answer = cached_response.get("response", "")
+                st.markdown(f"""
+                <div class="final-answer" style="border-color: #ff9800;">
+                    <strong>📝 From Memory</strong> <span style="font-size: 0.8rem; color: #666;">(previously answered by {cached_response.get('agent', 'agent')})</span><br><br>
+                    {final_answer}
+                </div>
+                """, unsafe_allow_html=True)
 
-            # Placeholder for the final answer
-            answer_placeholder = st.empty()
+                # Store in history (no trace for cached)
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "content": f"[From Memory] {final_answer}",
+                    "from_memory": True
+                })
 
-            # Run with streaming
-            result = run_agent_with_streaming(prompt, trace_container, answer_placeholder)
-            final_answer = get_final_answer(result)
+                # Rerun to update display
+                st.rerun()
+        else:
+            # Run agent with real-time streaming
+            with st.chat_message("assistant"):
+                # Header showing agent is working
+                status_placeholder = st.empty()
+                status_placeholder.markdown(f"**🔄 {st.session_state.current_agent.replace('_', ' ').title()} is working...**")
 
-            # Clear the status and show final answer
-            status_placeholder.empty()
-            answer_placeholder.markdown(f"""
-            <div class="final-answer">
-                <strong>✅ Final Answer:</strong><br><br>
-                {final_answer}
-            </div>
-            """, unsafe_allow_html=True)
+                # Create expander for real-time trace - starts expanded
+                with st.expander("🔍 ReAct Execution Trace (Live)", expanded=True):
+                    trace_container = st.container()
 
-            # Store in history
-            st.session_state.messages.append({
-                "role": "assistant",
-                "content": final_answer,
-                "trace": result
-            })
+                # Placeholder for the final answer
+                answer_placeholder = st.empty()
 
-            # Store execution history
-            st.session_state.execution_history.append({
-                "timestamp": datetime.now().isoformat(),
-                "agent": st.session_state.current_agent,
-                "mission": prompt,
-                "result": result
-            })
+                # Run with streaming
+                result = run_agent_with_streaming(prompt, trace_container, answer_placeholder)
+                final_answer = get_final_answer(result)
+
+                # Clear the status and show final answer
+                status_placeholder.empty()
+                answer_placeholder.markdown(f"""
+                <div class="final-answer">
+                    <strong>✅ Final Answer:</strong><br><br>
+                    {final_answer}
+                </div>
+                """, unsafe_allow_html=True)
+
+                # Store in history
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "content": final_answer,
+                    "trace": result
+                })
+
+                # Store execution history
+                st.session_state.execution_history.append({
+                    "timestamp": datetime.now().isoformat(),
+                    "agent": st.session_state.current_agent,
+                    "mission": prompt,
+                    "result": result
+                })
+
+                # Store in memory for future reference
+                token_stats = result.get("token_stats", {})
+                total_tokens = token_stats.get("total_tokens", 0)
+                store_in_memory(prompt, final_answer, st.session_state.current_agent, total_tokens)
+
+                # Rerun to update sidebar token display
+                st.rerun()
 
 
 if __name__ == "__main__":

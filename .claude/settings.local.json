@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(python init_duckdb.py:*)",
-      "Bash(python run_tests.py:*)"
+      "Bash(python run_tests.py:*)",
+      "Bash(python -m py_compile:*)",
+      "Bash(python:*)"
     ]
   }
 }
