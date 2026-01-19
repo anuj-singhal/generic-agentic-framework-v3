@@ -18,6 +18,7 @@ from core.tools_base import tool_registry
 from tools.example_tools import get_all_tools
 from agents.agent_definitions import get_available_agents, create_agent, AgentFactory
 from core.token_counter import get_token_counter
+from openai import OpenAI
 
 # DuckDB imports for database explorer
 import duckdb
@@ -392,6 +393,14 @@ def initialize_session_state():
         st.session_state.conversation_memory = []  # List of {query, response, agent, tokens, timestamp}
     if "memory_tokens" not in st.session_state:
         st.session_state.memory_tokens = 0
+    # Long-term memory (summaries after every 5 conversations)
+    if "long_term_memory" not in st.session_state:
+        st.session_state.long_term_memory = []  # List of {summary, conversation_range, tokens, timestamp}
+    if "long_term_memory_tokens" not in st.session_state:
+        st.session_state.long_term_memory_tokens = 0
+    # Total conversation counter (for tracking 5/10/15 thresholds)
+    if "total_conversation_count" not in st.session_state:
+        st.session_state.total_conversation_count = 0
 
 
 def render_sidebar():
@@ -403,7 +412,12 @@ def render_sidebar():
         # ═══════════════════════════════════════════════════════════════
         # SESSION TOKENS (Top Priority Display)
         # ═══════════════════════════════════════════════════════════════
-        memory_count = len(st.session_state.conversation_memory)
+        # Calculate memory counters
+        total_conv_count = st.session_state.total_conversation_count
+        next_threshold = get_next_summary_threshold()
+        short_term_count = len(st.session_state.conversation_memory)
+        long_term_count = len(st.session_state.long_term_memory)
+
         st.markdown(f"""
         <div class="token-card">
             <div class="token-card-header">SESSION TOKENS</div>
@@ -412,9 +426,18 @@ def render_sidebar():
                     <div class="token-value token-value-total" style="font-size: 1.4rem;">{st.session_state.total_tokens:,}</div>
                     <div class="token-label">Total</div>
                 </div>
-                <div class="token-stat" style="flex: 1;">
-                    <div class="token-value" style="color: #ff9800; font-size: 1.4rem;">{st.session_state.memory_tokens:,}</div>
-                    <div class="token-label">Memory ({memory_count}/5)</div>
+            </div>
+            <div style="border-top: 1px solid #90caf9; padding-top: 8px; margin-top: 4px;">
+                <div style="font-size: 0.65rem; color: #546e7a; margin-bottom: 6px; text-transform: uppercase;">Memory</div>
+                <div class="token-stats-row">
+                    <div class="token-stat">
+                        <div class="token-value" style="color: #ff9800;">{st.session_state.memory_tokens:,}</div>
+                        <div class="token-label">Short ({total_conv_count}/{next_threshold})</div>
+                    </div>
+                    <div class="token-stat">
+                        <div class="token-value" style="color: #9c27b0;">{st.session_state.long_term_memory_tokens:,}</div>
+                        <div class="token-label">Long ({long_term_count})</div>
+                    </div>
                 </div>
             </div>
             <div style="border-top: 1px solid #90caf9; padding-top: 8px; margin-top: 4px;">
@@ -543,22 +566,35 @@ def render_sidebar():
         # ACTIONS
         # ═══════════════════════════════════════════════════════════════
         st.markdown("---")
+        if st.button("🗑️ Clear Chat", use_container_width=True):
+            st.session_state.messages = []
+            st.session_state.execution_history = []
+            # Reset token counts
+            st.session_state.total_tokens = 0
+            st.session_state.last_input_tokens = 0
+            st.session_state.last_output_tokens = 0
+            st.session_state.last_total_tokens = 0
+            st.rerun()
+
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("🗑️ Clear Chat", use_container_width=True):
-                st.session_state.messages = []
-                st.session_state.execution_history = []
-                # Reset token counts
-                st.session_state.total_tokens = 0
-                st.session_state.last_input_tokens = 0
-                st.session_state.last_output_tokens = 0
-                st.session_state.last_total_tokens = 0
-                st.rerun()
-        with col2:
-            if st.button("🧠 Clear Memory", use_container_width=True):
+            if st.button("🧠 Clear Short", use_container_width=True, help="Clear short-term memory"):
                 st.session_state.conversation_memory = []
                 st.session_state.memory_tokens = 0
                 st.rerun()
+        with col2:
+            if st.button("📚 Clear Long", use_container_width=True, help="Clear long-term memory"):
+                st.session_state.long_term_memory = []
+                st.session_state.long_term_memory_tokens = 0
+                st.rerun()
+
+        if st.button("🔄 Clear All Memory", use_container_width=True):
+            st.session_state.conversation_memory = []
+            st.session_state.memory_tokens = 0
+            st.session_state.long_term_memory = []
+            st.session_state.long_term_memory_tokens = 0
+            st.session_state.total_conversation_count = 0
+            st.rerun()
 
 
 def render_react_trace(execution_data: Dict[str, Any]):
@@ -771,7 +807,7 @@ def render_streaming_trace_item(msg, container, token_count: int = None):
 
 
 def calculate_memory_tokens():
-    """Calculate total tokens used by conversation memory."""
+    """Calculate total tokens used by short-term conversation memory."""
     token_counter = get_token_counter(st.session_state.model_name)
     total = 0
     for conv in st.session_state.conversation_memory:
@@ -780,23 +816,122 @@ def calculate_memory_tokens():
     return total
 
 
-def build_memory_context() -> str:
-    """Build a context string from conversation memory for the agent."""
+def calculate_long_term_memory_tokens():
+    """Calculate total tokens used by long-term memory summaries."""
+    token_counter = get_token_counter(st.session_state.model_name)
+    total = 0
+    for mem in st.session_state.long_term_memory:
+        total += token_counter.count_text(mem.get("summary", ""))
+    return total
+
+
+def get_next_summary_threshold():
+    """Get the next conversation count threshold for summarization."""
+    count = st.session_state.total_conversation_count
+    # Thresholds are 5, 10, 15, 20, ...
+    return ((count // 5) + 1) * 5
+
+
+def summarize_conversations_for_long_term():
+    """Summarize the current short-term memory conversations using LLM and store in long-term memory."""
     if not st.session_state.conversation_memory:
+        return
+
+    if not st.session_state.api_key:
+        return
+
+    try:
+        # Build conversation text for summarization
+        conversations_text = []
+        for i, conv in enumerate(st.session_state.conversation_memory, 1):
+            conversations_text.append(f"Conversation {i}:")
+            conversations_text.append(f"User: {conv.get('query', '')}")
+            conversations_text.append(f"Assistant: {conv.get('response', '')}")
+            conversations_text.append("")
+
+        conversations_str = "\n".join(conversations_text)
+
+        # Create OpenAI client and summarize
+        client = OpenAI(api_key=st.session_state.api_key)
+
+        response = client.chat.completions.create(
+            model=st.session_state.model_name,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a helpful assistant that summarizes conversations. Create a concise summary that captures the key topics, questions asked, and important information from the conversations. The summary should be useful for providing context in future conversations."
+                },
+                {
+                    "role": "user",
+                    "content": f"Please summarize these {len(st.session_state.conversation_memory)} conversations into a brief, informative summary:\n\n{conversations_str}"
+                }
+            ],
+            temperature=0.3,
+            max_tokens=500
+        )
+
+        summary = response.choices[0].message.content
+
+        # Calculate tokens used for summarization
+        token_counter = get_token_counter(st.session_state.model_name)
+        summary_tokens = token_counter.count_text(summary)
+
+        # Store in long-term memory
+        start_conv = st.session_state.total_conversation_count - len(st.session_state.conversation_memory) + 1
+        end_conv = st.session_state.total_conversation_count
+
+        long_term_entry = {
+            "summary": summary,
+            "conversation_range": f"{start_conv}-{end_conv}",
+            "tokens": summary_tokens,
+            "timestamp": datetime.now().isoformat()
+        }
+
+        st.session_state.long_term_memory.append(long_term_entry)
+
+        # Update long-term memory tokens count
+        st.session_state.long_term_memory_tokens = calculate_long_term_memory_tokens()
+
+        # Add tokens used for summarization to total
+        input_tokens = token_counter.count_text(conversations_str) + 100  # ~100 for system prompt
+        output_tokens = summary_tokens
+        st.session_state.total_tokens += input_tokens + output_tokens
+
+    except Exception as e:
+        # Silently fail - don't break the main flow
+        print(f"Error summarizing for long-term memory: {e}")
+
+
+def build_memory_context() -> str:
+    """Build a context string from both short-term and long-term memory for the agent."""
+    memory_parts = []
+
+    # Add long-term memory first (lower priority, provides historical context)
+    if st.session_state.long_term_memory:
+        memory_parts.append("[LONG-TERM MEMORY - Historical conversation summaries]\n")
+        for i, mem in enumerate(st.session_state.long_term_memory, 1):
+            memory_parts.append(f"--- Summary {i} (Conversations {mem.get('conversation_range', 'unknown')}) ---")
+            memory_parts.append(mem.get("summary", ""))
+            memory_parts.append("")
+        memory_parts.append("[END OF LONG-TERM MEMORY]\n")
+
+    # Add short-term memory (higher priority, recent conversations)
+    if st.session_state.conversation_memory:
+        memory_parts.append("[SHORT-TERM MEMORY - Recent conversations (use this for follow-up questions)]\n")
+        for i, conv in enumerate(st.session_state.conversation_memory, 1):
+            memory_parts.append(f"--- Conversation {i} (Agent: {conv.get('agent', 'unknown')}) ---")
+            memory_parts.append(f"User: {conv.get('query', '')}")
+            # Truncate long responses to save tokens
+            response = conv.get('response', '')
+            if len(response) > 500:
+                response = response[:500] + "..."
+            memory_parts.append(f"Assistant: {response}")
+            memory_parts.append("")
+        memory_parts.append("[END OF SHORT-TERM MEMORY]\n")
+
+    if not memory_parts:
         return ""
 
-    memory_parts = ["[CONVERSATION MEMORY - Use this context for follow-up questions]\n"]
-    for i, conv in enumerate(st.session_state.conversation_memory, 1):
-        memory_parts.append(f"--- Conversation {i} (Agent: {conv.get('agent', 'unknown')}) ---")
-        memory_parts.append(f"User: {conv.get('query', '')}")
-        # Truncate long responses to save tokens
-        response = conv.get('response', '')
-        if len(response) > 500:
-            response = response[:500] + "..."
-        memory_parts.append(f"Assistant: {response}")
-        memory_parts.append("")
-
-    memory_parts.append("[END OF MEMORY]\n")
     return "\n".join(memory_parts)
 
 
@@ -822,7 +957,10 @@ def check_duplicate_question(query: str) -> dict | None:
 
 
 def store_in_memory(query: str, response: str, agent: str, tokens: int):
-    """Store a conversation in short-term memory (sliding window of last 5 conversations)."""
+    """Store a conversation in short-term memory and trigger long-term summarization when needed."""
+    # Increment total conversation count
+    st.session_state.total_conversation_count += 1
+
     conversation = {
         "query": query,
         "response": response,
@@ -831,12 +969,19 @@ def store_in_memory(query: str, response: str, agent: str, tokens: int):
         "timestamp": datetime.now().isoformat()
     }
 
-    # Remove oldest conversation if at max capacity (sliding window)
-    while len(st.session_state.conversation_memory) >= 5:
-        st.session_state.conversation_memory.pop(0)  # Remove first/oldest
-
-    # Add new conversation to memory
+    # Add new conversation to short-term memory
     st.session_state.conversation_memory.append(conversation)
+
+    # Check if we need to summarize (every 5 conversations)
+    if st.session_state.total_conversation_count > 0 and st.session_state.total_conversation_count % 5 == 0:
+        # Summarize current short-term memory to long-term
+        summarize_conversations_for_long_term()
+        # Clear short-term memory after summarization
+        st.session_state.conversation_memory = []
+
+    # Remove oldest if short-term memory exceeds 5 (sliding window within the 5-conversation cycle)
+    while len(st.session_state.conversation_memory) > 5:
+        st.session_state.conversation_memory.pop(0)
 
     # Update memory tokens count
     st.session_state.memory_tokens = calculate_memory_tokens()
