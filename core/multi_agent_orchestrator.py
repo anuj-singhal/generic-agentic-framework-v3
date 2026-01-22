@@ -25,6 +25,85 @@ from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 
 from core.config import FrameworkConfig, get_config
+import re
+
+
+def format_sql(sql: str) -> str:
+    """
+    Format SQL query for better readability.
+    Adds proper indentation and line breaks.
+    """
+    if not sql:
+        return sql
+
+    # Clean up the SQL first
+    sql = sql.strip()
+    sql = re.sub(r'\s+', ' ', sql)  # Normalize whitespace
+
+    # Keywords that should start on a new line (with proper spacing)
+    newline_before = [
+        'SELECT', 'FROM', 'WHERE', 'GROUP BY', 'ORDER BY', 'HAVING',
+        'LIMIT', 'OFFSET', 'UNION', 'UNION ALL', 'INTERSECT', 'EXCEPT',
+        'LEFT JOIN', 'RIGHT JOIN', 'INNER JOIN', 'OUTER JOIN', 'FULL JOIN',
+        'CROSS JOIN', 'JOIN', 'ON', 'AND', 'OR'
+    ]
+
+    # Sort by length (longest first) to avoid partial matches
+    newline_before.sort(key=len, reverse=True)
+
+    # First, handle CTEs specially
+    # Pattern: WITH name AS ( ... ), name2 AS ( ... ) SELECT
+    if re.search(r'\bWITH\b', sql, re.IGNORECASE):
+        # Split into CTE part and main query
+        # Find the final SELECT that's not inside a CTE
+        parts = re.split(r'\)\s*(?=SELECT\s+(?!.*\bAS\s*\())', sql, maxsplit=1, flags=re.IGNORECASE)
+
+        if len(parts) == 2:
+            cte_part = parts[0] + ')'
+            main_query = parts[1]
+
+            # Format CTE part
+            # Handle WITH keyword
+            cte_part = re.sub(r'\bWITH\b', '\nWITH', cte_part, flags=re.IGNORECASE)
+
+            # Handle each CTE definition: name AS (
+            cte_part = re.sub(r'(\w+)\s+AS\s*\(', r'\n    \1 AS (\n        ', cte_part, flags=re.IGNORECASE)
+
+            # Handle CTE separators: ), name AS (
+            cte_part = re.sub(r'\)\s*,\s*(\w+)\s+AS\s*\(', r'\n    ),\n    \1 AS (\n        ', cte_part, flags=re.IGNORECASE)
+
+            # Add newlines for keywords inside CTEs
+            for kw in ['SELECT', 'FROM', 'WHERE', 'GROUP BY', 'ORDER BY', 'JOIN', 'LEFT JOIN', 'AND']:
+                cte_part = re.sub(r'(?<!\w)(' + kw + r')(?!\w)', r'\n        \1', cte_part, flags=re.IGNORECASE)
+
+            # Close final CTE
+            cte_part = re.sub(r'\)\s*$', '\n    )', cte_part)
+
+            # Format main query
+            for kw in newline_before:
+                main_query = re.sub(r'(?<!\w)(' + kw + r')(?!\w)', r'\n\1', main_query, flags=re.IGNORECASE)
+
+            sql = cte_part + '\n' + main_query
+        else:
+            # Fallback: just format normally
+            for kw in newline_before:
+                sql = re.sub(r'(?<!\w)(' + kw + r')(?!\w)', r'\n\1', sql, flags=re.IGNORECASE)
+    else:
+        # No CTEs, just format with newlines before keywords
+        for kw in newline_before:
+            sql = re.sub(r'(?<!\w)(' + kw + r')(?!\w)', r'\n\1', sql, flags=re.IGNORECASE)
+
+    # Clean up
+    lines = [line.rstrip() for line in sql.split('\n')]
+    lines = [line for line in lines if line.strip()]  # Remove empty lines
+
+    # Remove leading newline if present
+    result = '\n'.join(lines).strip()
+
+    # Clean up multiple newlines
+    result = re.sub(r'\n{3,}', '\n\n', result)
+
+    return result
 
 
 # Load schema document path
@@ -585,6 +664,9 @@ Respond ONLY with the JSON, no additional text."""
             if "```sql" in sql:
                 sql = sql.split("```sql")[1].split("```")[0].strip()
 
+        # Format SQL for readability
+        sql = format_sql(sql)
+
         # Create trace for this agent
         agent_type = "4.1 (Simple)" if retry_count == 0 else f"4.1 (Simple - Retry {retry_count})"
         trace = self._create_trace(
@@ -594,7 +676,7 @@ Respond ONLY with the JSON, no additional text."""
             output_summary=f"Generated SQL ({len(sql)} chars){' - RETRY' if retry_count > 0 else ''}",
             details={
                 "agent_type": agent_type,
-                "sql_preview": sql[:200] + "..." if len(sql) > 200 else sql,
+                "sql_preview": sql,  # Full formatted SQL
                 "explanation": explanation,
                 "retry_count": retry_count,
                 "has_validation_feedback": bool(validation_feedback)
@@ -672,6 +754,9 @@ Respond ONLY with the JSON, no additional text."""
                 sql = sql.split("```sql")[1].split("```")[0].strip()
             sub_queries = []
 
+        # Format SQL for readability
+        sql = format_sql(sql)
+
         # Create trace for this agent
         agent_type = "4.2 (Complex/CTE)" if retry_count == 0 else f"4.2 (Complex/CTE - Retry {retry_count})"
         trace = self._create_trace(
@@ -683,7 +768,7 @@ Respond ONLY with the JSON, no additional text."""
                 "agent_type": agent_type,
                 "subtasks": subtasks,
                 "cte_count": len(sub_queries),
-                "sql_preview": sql[:200] + "..." if len(sql) > 200 else sql,
+                "sql_preview": sql,  # Full formatted SQL
                 "explanation": explanation,
                 "retry_count": retry_count,
                 "has_validation_feedback": bool(validation_feedback)

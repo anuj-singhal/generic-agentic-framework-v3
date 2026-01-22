@@ -50,6 +50,37 @@ st.markdown("""
     .stApp {
         max-width: 100%;
     }
+    /* Dark theme for SQL code blocks */
+    [data-testid="stCode"] {
+        background-color: #1e1e1e !important;
+        border: 1px solid #333 !important;
+        border-radius: 8px !important;
+    }
+    [data-testid="stCode"] pre {
+        background-color: #1e1e1e !important;
+        color: #9cdcfe !important;
+    }
+    [data-testid="stCode"] code {
+        background-color: #1e1e1e !important;
+        color: #9cdcfe !important;
+    }
+    /* Syntax highlighting for SQL in dark theme */
+    [data-testid="stCode"] .hljs-keyword {
+        color: #569cd6 !important;
+        font-weight: 600;
+    }
+    [data-testid="stCode"] .hljs-string {
+        color: #ce9178 !important;
+    }
+    [data-testid="stCode"] .hljs-number {
+        color: #b5cea8 !important;
+    }
+    [data-testid="stCode"] .hljs-built_in {
+        color: #dcdcaa !important;
+    }
+    [data-testid="stCode"] .hljs-title {
+        color: #4ec9b0 !important;
+    }
     /* Sidebar styling - Light Blue Theme */
     [data-testid="stSidebar"] {
         background: linear-gradient(180deg, #e3f2fd 0%, #bbdefb 100%);
@@ -453,6 +484,21 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
+def render_sql_code_block(sql: str, container=None, show_header: bool = True):
+    """Render SQL with Streamlit's native code block."""
+    if not sql:
+        return
+
+    target = container if container else st
+
+    # Show header if requested
+    if show_header:
+        target.markdown("**📝 Generated SQL**")
+
+    # Use Streamlit's native code block - reliable and properly rendered
+    target.code(sql, language="sql")
+
+
 def get_duckdb_tables():
     """Get list of tables from DuckDB database."""
     if not os.path.exists(DB_PATH):
@@ -810,8 +856,7 @@ def render_react_trace(execution_data: Dict[str, Any]):
             # Show generated SQL if available
             sql = execution_data.get("generated_sql")
             if sql:
-                st.markdown("**Generated SQL:**")
-                st.code(sql, language="sql")
+                render_sql_code_block(sql, st)
 
         # Also render ReAct-style trace from agent traces
         if agent_traces:
@@ -1148,9 +1193,9 @@ def render_agent_trace_card(trace: dict, container, expanded: bool = False):
 </div>
     """, unsafe_allow_html=True)
 
-    # Show SQL preview separately if present
+    # Show SQL preview separately if present (with black background styling)
     if sql_preview:
-        container.code(sql_preview, language="sql")
+        render_sql_code_block(sql_preview, container, show_header=False)
 
 
 def render_agent_trace_as_react(trace: dict, container):
@@ -1231,10 +1276,10 @@ def render_agent_trace_as_react(trace: dict, container):
     </div>
     """, unsafe_allow_html=True)
 
-    # Show SQL code separately if present
+    # Show SQL code separately if present (with black background styling)
     sql_preview = details.get("sql_preview", "")
     if sql_preview:
-        container.code(sql_preview, language="sql")
+        render_sql_code_block(sql_preview, container, show_header=False)
 
 
 def run_multi_agent_with_streaming(mission: str, trace_container, status_placeholder, react_container=None):
@@ -1369,8 +1414,7 @@ def render_multi_agent_trace(result: Dict[str, Any]):
     # Show SQL if available
     sql = result.get("generated_sql")
     if sql:
-        st.markdown("**Generated SQL:**")
-        st.code(sql, language="sql")
+        render_sql_code_block(sql, st)
 
     # Show confidence
     confidence = result.get("overall_confidence", 0)
@@ -1825,8 +1869,7 @@ def main():
 
                         # Show SQL if generated
                         if result.get("generated_sql"):
-                            answer_placeholder.markdown("**Generated SQL:**")
-                            st.code(result["generated_sql"], language="sql")
+                            render_sql_code_block(result["generated_sql"], st)
 
                             # Show confidence
                             confidence = result.get("overall_confidence", 0)
