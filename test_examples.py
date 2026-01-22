@@ -995,9 +995,132 @@ Order by total portfolio value descending. Use multiple CTEs to organize the log
 ]
 
 
+# =============================================================================
+# MULTI-DATA-AGENT EXAMPLES (Advanced Multi-Agent Workflow)
+# =============================================================================
+
+MULTI_DATA_AGENT_SIMPLE_EXAMPLES = [
+    {
+        "name": "Multi-Agent Simple Query",
+        "agent": "multi_data_agent",
+        "query": "Show me all clients in the database",
+        "expected_tools": ["run_multi_agent_query"],
+        "description": "Simple query through multi-agent workflow"
+    },
+    {
+        "name": "Multi-Agent General Question",
+        "agent": "multi_data_agent",
+        "query": "What is SQL?",
+        "expected_tools": ["run_multi_agent_query"],
+        "description": "General question - should be answered by LLM directly"
+    },
+    {
+        "name": "Get Schema Document",
+        "agent": "multi_data_agent",
+        "query": "Show me the database schema document",
+        "expected_tools": ["get_schema_document"],
+        "description": "Get the complete schema definition"
+    },
+    {
+        "name": "Get Table Descriptions",
+        "agent": "multi_data_agent",
+        "query": "What tables are available and what do they contain?",
+        "expected_tools": ["get_table_descriptions"],
+        "description": "Get summary of all tables"
+    },
+]
+
+MULTI_DATA_AGENT_MEDIUM_EXAMPLES = [
+    {
+        "name": "Multi-Agent Join Query",
+        "agent": "multi_data_agent",
+        "query": "Show me all clients along with their portfolio names",
+        "expected_tools": ["run_multi_agent_query"],
+        "description": "Medium complexity query through multi-agent workflow"
+    },
+    {
+        "name": "Analyze Query Requirements",
+        "agent": "multi_data_agent",
+        "query": "What tables and complexity would be needed to answer: 'Show top 5 clients by portfolio value'",
+        "expected_tools": ["analyze_query_requirements"],
+        "description": "Analyze query requirements before execution"
+    },
+    {
+        "name": "Extract Related Tables",
+        "agent": "multi_data_agent",
+        "query": "Get the detailed schema for CLIENTS and PORTFOLIOS tables",
+        "expected_tools": ["extract_related_tables"],
+        "description": "Extract schema for multiple related tables"
+    },
+    {
+        "name": "Get Join Syntax Help",
+        "agent": "multi_data_agent",
+        "query": "How do I join the CLIENTS and PORTFOLIOS tables?",
+        "expected_tools": ["get_join_syntax_help"],
+        "description": "Get correct JOIN syntax for two tables"
+    },
+]
+
+MULTI_DATA_AGENT_COMPLEX_EXAMPLES = [
+    {
+        "name": "Complex Portfolio Analysis",
+        "agent": "multi_data_agent",
+        "query": """Calculate the total portfolio value for each client.
+Show client name, number of portfolios, total holdings value (quantity * avg_cost),
+and rank clients by total value. Only include clients with approved KYC status.""",
+        "expected_tools": ["run_multi_agent_query"],
+        "description": "Complex query with CTEs and multiple aggregations"
+    },
+    {
+        "name": "Trading Pattern Analysis",
+        "agent": "multi_data_agent",
+        "query": """Analyze trading patterns:
+1. Show total buy vs sell transactions per client
+2. Calculate average transaction value per client
+3. Identify clients with more sell than buy transactions
+4. Order by total transaction count""",
+        "expected_tools": ["run_multi_agent_query"],
+        "description": "Multi-part analysis query"
+    },
+    {
+        "name": "Asset Diversification Report",
+        "agent": "multi_data_agent",
+        "query": """Create a diversification report showing:
+- Number of unique asset types per client
+- Percentage of portfolio in each asset type (Equity, ETF, Crypto)
+- Top 3 most held assets per client
+Use CTEs to organize the calculation logic.""",
+        "expected_tools": ["run_multi_agent_query"],
+        "description": "Complex diversification analysis"
+    },
+    {
+        "name": "Full Workflow Demonstration",
+        "agent": "multi_data_agent",
+        "query": """I need a comprehensive analysis:
+1. First show me what tables are available
+2. Then show top 5 clients by total transaction volume
+3. Include their risk profiles and KYC status
+4. Show their most frequently traded asset
+
+This should trigger the full 6-agent workflow with validation.""",
+        "expected_tools": ["run_multi_agent_query"],
+        "description": "Demonstrates full multi-agent workflow"
+    },
+    {
+        "name": "Validation Retry Test",
+        "agent": "multi_data_agent",
+        "query": """Write a query to calculate the monthly transaction growth rate for each portfolio,
+comparing each month to the previous month. Use window functions for the calculation.
+Show portfolio name, month, transaction count, and growth percentage.""",
+        "expected_tools": ["run_multi_agent_query"],
+        "description": "Complex query that may trigger validation retries"
+    },
+]
+
+
 def print_examples():
     """Print all examples in a formatted way."""
-    
+
     all_categories = [
         ("🟢 SIMPLE EXAMPLES", SIMPLE_EXAMPLES),
         ("🟡 MEDIUM EXAMPLES", MEDIUM_EXAMPLES),
@@ -1013,6 +1136,9 @@ def print_examples():
         ("💼 WEALTH SIMPLE", WEALTH_SIMPLE_EXAMPLES),
         ("💼 WEALTH MEDIUM", WEALTH_MEDIUM_EXAMPLES),
         ("💼 WEALTH COMPLEX", WEALTH_COMPLEX_EXAMPLES),
+        ("🤖 MULTI-DATA-AGENT SIMPLE", MULTI_DATA_AGENT_SIMPLE_EXAMPLES),
+        ("🤖 MULTI-DATA-AGENT MEDIUM", MULTI_DATA_AGENT_MEDIUM_EXAMPLES),
+        ("🤖 MULTI-DATA-AGENT COMPLEX", MULTI_DATA_AGENT_COMPLEX_EXAMPLES),
     ]
     
     for category_name, examples in all_categories:
@@ -1044,7 +1170,10 @@ def get_example_by_name(name: str) -> dict:
         NAME_MATCHING_COMPLEX_EXAMPLES +
         WEALTH_SIMPLE_EXAMPLES +
         WEALTH_MEDIUM_EXAMPLES +
-        WEALTH_COMPLEX_EXAMPLES
+        WEALTH_COMPLEX_EXAMPLES +
+        MULTI_DATA_AGENT_SIMPLE_EXAMPLES +
+        MULTI_DATA_AGENT_MEDIUM_EXAMPLES +
+        MULTI_DATA_AGENT_COMPLEX_EXAMPLES
     )
 
     for example in all_examples:
@@ -1069,7 +1198,10 @@ def get_examples_by_agent(agent_name: str) -> list:
         NAME_MATCHING_COMPLEX_EXAMPLES +
         WEALTH_SIMPLE_EXAMPLES +
         WEALTH_MEDIUM_EXAMPLES +
-        WEALTH_COMPLEX_EXAMPLES
+        WEALTH_COMPLEX_EXAMPLES +
+        MULTI_DATA_AGENT_SIMPLE_EXAMPLES +
+        MULTI_DATA_AGENT_MEDIUM_EXAMPLES +
+        MULTI_DATA_AGENT_COMPLEX_EXAMPLES
     )
 
     return [ex for ex in all_examples if ex['agent'] == agent_name]
@@ -1091,7 +1223,10 @@ def get_examples_by_tool(tool_name: str) -> list:
         NAME_MATCHING_COMPLEX_EXAMPLES +
         WEALTH_SIMPLE_EXAMPLES +
         WEALTH_MEDIUM_EXAMPLES +
-        WEALTH_COMPLEX_EXAMPLES
+        WEALTH_COMPLEX_EXAMPLES +
+        MULTI_DATA_AGENT_SIMPLE_EXAMPLES +
+        MULTI_DATA_AGENT_MEDIUM_EXAMPLES +
+        MULTI_DATA_AGENT_COMPLEX_EXAMPLES
     )
 
     return [ex for ex in all_examples if tool_name in ex['expected_tools']]

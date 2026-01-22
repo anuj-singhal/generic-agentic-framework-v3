@@ -300,6 +300,155 @@ st.markdown("""
         margin: 15px 0;
         border-radius: 8px;
     }
+    /* Multi-Agent Trace Styles */
+    .multi-agent-trace {
+        background: #fafafa;
+        border-radius: 8px;
+        padding: 12px;
+        margin: 8px 0;
+    }
+    .multi-agent-header {
+        background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%);
+        color: white;
+        padding: 10px 15px;
+        border-radius: 6px 6px 0 0;
+        font-weight: 600;
+        font-size: 0.9rem;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .agent-trace-card {
+        background: white;
+        border: 1px solid #e0e0e0;
+        border-radius: 6px;
+        margin: 6px 0;
+        overflow: hidden;
+        transition: all 0.2s ease;
+    }
+    .agent-trace-card:hover {
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .agent-trace-header {
+        padding: 8px 12px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        cursor: pointer;
+    }
+    .agent-icon {
+        font-size: 1.2rem;
+        width: 28px;
+        height: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+    }
+    .agent-name {
+        font-weight: 600;
+        font-size: 0.85rem;
+        flex-grow: 1;
+    }
+    .agent-status {
+        font-size: 0.7rem;
+        padding: 2px 8px;
+        border-radius: 10px;
+        font-weight: 500;
+    }
+    .status-completed {
+        background: #e8f5e9;
+        color: #2e7d32;
+    }
+    .status-running {
+        background: #fff3e0;
+        color: #ef6c00;
+    }
+    .status-failed {
+        background: #ffebee;
+        color: #c62828;
+    }
+    .status-skipped {
+        background: #f5f5f5;
+        color: #757575;
+    }
+    .agent-trace-content {
+        padding: 8px 12px;
+        border-top: 1px solid #f0f0f0;
+        font-size: 0.8rem;
+    }
+    .trace-row {
+        display: flex;
+        margin: 4px 0;
+    }
+    .trace-label {
+        color: #666;
+        width: 70px;
+        flex-shrink: 0;
+        font-weight: 500;
+    }
+    .trace-value {
+        color: #333;
+        word-break: break-word;
+    }
+    .confidence-bar {
+        height: 6px;
+        background: #e0e0e0;
+        border-radius: 3px;
+        overflow: hidden;
+        margin-top: 4px;
+    }
+    .confidence-fill {
+        height: 100%;
+        border-radius: 3px;
+        transition: width 0.3s ease;
+    }
+    .confidence-high {
+        background: linear-gradient(90deg, #4caf50, #8bc34a);
+    }
+    .confidence-medium {
+        background: linear-gradient(90deg, #ff9800, #ffc107);
+    }
+    .confidence-low {
+        background: linear-gradient(90deg, #f44336, #ff5722);
+    }
+    /* Agent type colors */
+    .agent-prevalidation { background: #e3f2fd; border-left: 3px solid #1976d2; }
+    .agent-prevalidation .agent-icon { background: #1976d2; color: white; }
+    .agent-schema { background: #f3e5f5; border-left: 3px solid #7b1fa2; }
+    .agent-schema .agent-icon { background: #7b1fa2; color: white; }
+    .agent-orchestrator { background: #fff3e0; border-left: 3px solid #ef6c00; }
+    .agent-orchestrator .agent-icon { background: #ef6c00; color: white; }
+    .agent-generator { background: #e8f5e9; border-left: 3px solid #388e3c; }
+    .agent-generator .agent-icon { background: #388e3c; color: white; }
+    .agent-validator { background: #fce4ec; border-left: 3px solid #c2185b; }
+    .agent-validator .agent-icon { background: #c2185b; color: white; }
+    .agent-retry { background: #fff8e1; border-left: 3px solid #ffa000; }
+    .agent-retry .agent-icon { background: #ffa000; color: white; }
+    .agent-executor { background: #e0f7fa; border-left: 3px solid #0097a7; }
+    .agent-executor .agent-icon { background: #0097a7; color: white; }
+    .sql-preview {
+        background: #263238;
+        color: #aed581;
+        padding: 8px 12px;
+        border-radius: 4px;
+        font-family: 'Consolas', 'Monaco', monospace;
+        font-size: 0.75rem;
+        overflow-x: auto;
+        margin-top: 6px;
+    }
+    .validation-summary {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 6px;
+    }
+    .validation-item {
+        background: #f5f5f5;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 0.75rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -635,7 +784,45 @@ def render_sidebar():
 
 
 def render_react_trace(execution_data: Dict[str, Any]):
-    """Render the ReAct execution trace."""
+    """Render the ReAct execution trace or multi-agent trace."""
+    # Check if this is a multi-agent trace
+    agent_traces = execution_data.get("agent_traces", [])
+
+    if agent_traces:
+        # Render multi-agent trace
+        token_stats = execution_data.get("token_stats", {})
+        total_tokens = token_stats.get("total_tokens", 0)
+        confidence = execution_data.get("overall_confidence", 0)
+
+        trace_header = "🤖 View Multi-Agent Workflow Trace"
+        if total_tokens > 0:
+            trace_header += f" ({total_tokens:,} tokens)"
+
+        with st.expander(trace_header, expanded=False):
+            # Show summary at top
+            st.markdown(f"""
+            <div style="background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%); padding: 10px 15px; border-radius: 6px; margin-bottom: 12px;">
+                <div style="font-size: 0.85rem; color: #1565c0;">
+                    <strong>Agents Executed:</strong> {len(agent_traces)} |
+                    <strong>Confidence:</strong> {confidence:.0%} |
+                    <strong>Tokens:</strong> {total_tokens:,}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # Render each agent trace card
+            for trace in agent_traces:
+                render_agent_trace_card(trace, st)
+
+            # Show generated SQL if available
+            sql = execution_data.get("generated_sql")
+            if sql:
+                st.markdown("**Generated SQL:**")
+                st.code(sql, language="sql")
+
+        return
+
+    # Standard ReAct trace rendering
     messages = execution_data.get("messages", [])
     token_stats = execution_data.get("token_stats", {})
     message_tokens = token_stats.get("message_tokens", [])
@@ -841,6 +1028,290 @@ def render_streaming_trace_item(msg, container, token_count: int = None):
             {msg.content[:500]}{'...' if len(msg.content) > 500 else ''}
         </div>
         """, unsafe_allow_html=True)
+
+
+def get_agent_class(agent_id: str) -> str:
+    """Get CSS class for agent type."""
+    class_map = {
+        "agent1": "agent-prevalidation",
+        "agent2": "agent-schema",
+        "agent3": "agent-orchestrator",
+        "agent4": "agent-generator",
+        "agent5": "agent-validator",
+        "agent5.1": "agent-validator",
+        "agent5.2": "agent-validator",
+        "agent5.3": "agent-validator",
+        "retry": "agent-retry",
+        "agent6": "agent-executor",
+    }
+    return class_map.get(agent_id, "agent-prevalidation")
+
+
+def get_agent_icon(agent_id: str) -> str:
+    """Get icon for agent type."""
+    icon_map = {
+        "agent1": "🔍",
+        "agent2": "📋",
+        "agent3": "🎯",
+        "agent4": "⚙️",
+        "agent5": "✅",
+        "agent5.1": "📝",
+        "agent5.2": "🗄️",
+        "agent5.3": "🎯",
+        "retry": "🔄",
+        "agent6": "🚀",
+    }
+    return icon_map.get(agent_id, "🔷")
+
+
+def render_agent_trace_card(trace: dict, container, expanded: bool = False):
+    """Render a single agent trace as a styled card."""
+    agent_id = trace.get("agent_id", "unknown")
+    agent_name = trace.get("agent_name", "Unknown Agent")
+    status = trace.get("status", "unknown")
+    input_summary = trace.get("input_summary", "")
+    output_summary = trace.get("output_summary", "")
+    details = trace.get("details", {})
+
+    agent_class = get_agent_class(agent_id)
+    icon = get_agent_icon(agent_id)
+
+    # Clean agent name (remove emoji if present)
+    clean_name = ''.join(c for c in agent_name if ord(c) < 128 or c.isalnum() or c.isspace()).strip()
+    if not clean_name:
+        clean_name = agent_id.replace("_", " ").title()
+
+    status_class = f"status-{status}"
+
+    # Build details HTML
+    details_html = ""
+
+    # Add confidence bar for validators
+    confidence = details.get("confidence") or details.get("overall_confidence")
+    if confidence is not None:
+        conf_percent = float(confidence) * 100
+        conf_class = "confidence-high" if conf_percent >= 90 else "confidence-medium" if conf_percent >= 70 else "confidence-low"
+        details_html += f"""
+        <div class="trace-row">
+            <span class="trace-label">Confidence:</span>
+            <span class="trace-value">{conf_percent:.0f}%</span>
+        </div>
+        <div class="confidence-bar">
+            <div class="confidence-fill {conf_class}" style="width: {conf_percent}%"></div>
+        </div>
+        """
+
+    # Add SQL preview for generator
+    sql_preview = details.get("sql_preview", "")
+    if sql_preview:
+        # Escape HTML in SQL
+        sql_escaped = sql_preview.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        details_html += f'<div class="sql-preview">{sql_escaped}</div>'
+
+    # Add validation summary for main validator
+    if agent_id == "agent5" and "syntax_confidence" in details:
+        syntax_conf = details.get("syntax_confidence", 0) * 100
+        schema_conf = details.get("schema_confidence", 0) * 100
+        semantic_conf = details.get("semantic_confidence", 0) * 100
+        details_html += f"""
+        <div class="validation-summary">
+            <span class="validation-item">Syntax: {syntax_conf:.0f}%</span>
+            <span class="validation-item">Schema: {schema_conf:.0f}%</span>
+            <span class="validation-item">Semantic: {semantic_conf:.0f}%</span>
+        </div>
+        """
+
+    # Add complexity for orchestrator
+    if "complexity" in details:
+        details_html += f"""
+        <div class="trace-row">
+            <span class="trace-label">Complexity:</span>
+            <span class="trace-value"><strong>{details['complexity']}</strong></span>
+        </div>
+        """
+
+    # Add tables for schema extraction
+    if "tables_extracted" in details:
+        tables = details["tables_extracted"]
+        if isinstance(tables, list):
+            details_html += f"""
+            <div class="trace-row">
+                <span class="trace-label">Tables:</span>
+                <span class="trace-value">{', '.join(tables) if tables else 'None'}</span>
+            </div>
+            """
+
+    # Add rows returned for executor
+    if "rows_returned" in details:
+        details_html += f"""
+        <div class="trace-row">
+            <span class="trace-label">Rows:</span>
+            <span class="trace-value">{details['rows_returned']}</span>
+        </div>
+        """
+
+    # Add retry info
+    if details.get("retry_count", 0) > 0:
+        details_html += f"""
+        <div class="trace-row">
+            <span class="trace-label">Retry:</span>
+            <span class="trace-value">Attempt #{details['retry_count'] + 1}</span>
+        </div>
+        """
+
+    html = f"""
+    <div class="agent-trace-card {agent_class}">
+        <div class="agent-trace-header">
+            <span class="agent-icon">{icon}</span>
+            <span class="agent-name">{clean_name}</span>
+            <span class="agent-status {status_class}">{status.upper()}</span>
+        </div>
+        <div class="agent-trace-content">
+            <div class="trace-row">
+                <span class="trace-label">Input:</span>
+                <span class="trace-value">{input_summary}</span>
+            </div>
+            <div class="trace-row">
+                <span class="trace-label">Output:</span>
+                <span class="trace-value">{output_summary}</span>
+            </div>
+            {details_html}
+        </div>
+    </div>
+    """
+
+    container.markdown(html, unsafe_allow_html=True)
+
+
+def run_multi_agent_with_streaming(mission: str, trace_container, status_placeholder):
+    """Run the multi-agent orchestrator with real-time trace updates."""
+    from core.multi_agent_orchestrator import MultiAgentDataOrchestrator
+    from core.config import FrameworkConfig, ModelConfig
+
+    # Create config
+    config = FrameworkConfig(
+        model=ModelConfig(
+            model_name=st.session_state.model_name,
+            temperature=st.session_state.temperature,
+            api_key=st.session_state.api_key
+        ),
+        max_iterations=st.session_state.max_iterations
+    )
+
+    orchestrator = MultiAgentDataOrchestrator(config=config)
+
+    # Initialize token counter
+    token_counter = get_token_counter(st.session_state.model_name)
+
+    # Track displayed traces
+    displayed_traces = set()
+    final_state = None
+    all_traces = []
+
+    # Render header
+    trace_container.markdown("""
+    <div class="multi-agent-header">
+        <span>🤖</span>
+        <span>Multi-Agent Workflow Execution</span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Create a container for agent cards
+    agents_container = trace_container.container()
+
+    # Stream the execution
+    try:
+        for state_update in orchestrator.stream(mission):
+            for node_name, node_state in state_update.items():
+                if node_name == "__end__":
+                    continue
+
+                # Update status
+                current_agent = node_state.get("current_agent", "processing")
+                agent_display = current_agent.replace("_", " ").title()
+                status_placeholder.markdown(f"**🔄 Processing: {agent_display}...**")
+
+                # Get new traces and render them
+                traces = node_state.get("agent_traces", [])
+                for i, trace in enumerate(traces):
+                    trace_id = f"{trace.get('agent_id')}_{trace.get('timestamp', i)}"
+                    if trace_id not in displayed_traces:
+                        displayed_traces.add(trace_id)
+                        all_traces.append(trace)
+                        render_agent_trace_card(trace, agents_container)
+
+                final_state = node_state
+
+    except Exception as e:
+        trace_container.error(f"Error during execution: {str(e)}")
+        return {
+            "error": str(e),
+            "is_complete": True,
+            "final_answer": f"An error occurred: {str(e)}",
+            "agent_traces": all_traces
+        }
+
+    # Calculate token stats (approximate)
+    execution_tokens = 0
+    for trace in all_traces:
+        # Rough estimate based on trace content
+        execution_tokens += len(str(trace)) // 4
+
+    st.session_state.total_tokens += execution_tokens
+    st.session_state.last_total_tokens = execution_tokens
+
+    # Build result
+    result = {
+        "messages": final_state.get("messages", []) if final_state else [],
+        "mission": mission,
+        "agent_traces": all_traces,
+        "is_complete": True,
+        "final_answer": final_state.get("final_answer") if final_state else None,
+        "general_answer": final_state.get("general_answer") if final_state else None,
+        "generated_sql": final_state.get("generated_sql") if final_state else None,
+        "overall_confidence": final_state.get("overall_confidence", 0) if final_state else 0,
+        "query_results": final_state.get("query_results") if final_state else None,
+        "error": final_state.get("error") if final_state else None,
+        "token_stats": {
+            "total_tokens": execution_tokens,
+            "prompt_tokens": execution_tokens // 2,
+            "completion_tokens": execution_tokens // 2
+        }
+    }
+
+    return result
+
+
+def render_multi_agent_trace(result: Dict[str, Any]):
+    """Render the multi-agent execution trace for stored messages."""
+    traces = result.get("agent_traces", [])
+
+    if not traces:
+        st.info("No agent trace available.")
+        return
+
+    # Render header
+    st.markdown("""
+    <div class="multi-agent-header">
+        <span>🤖</span>
+        <span>Multi-Agent Workflow Trace</span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Render each agent trace
+    for trace in traces:
+        render_agent_trace_card(trace, st)
+
+    # Show SQL if available
+    sql = result.get("generated_sql")
+    if sql:
+        st.markdown("**Generated SQL:**")
+        st.code(sql, language="sql")
+
+    # Show confidence
+    confidence = result.get("overall_confidence", 0)
+    if confidence > 0:
+        st.markdown(f"**Validation Confidence:** {confidence:.0%}")
 
 
 def calculate_memory_tokens():
@@ -1260,54 +1731,121 @@ def main():
                     # Rerun to update display
                     st.rerun()
             else:
-                # Run agent with real-time streaming
-                with st.chat_message("assistant"):
-                    # Header showing agent is working
-                    status_placeholder = st.empty()
-                    status_placeholder.markdown(f"**🔄 {st.session_state.current_agent.replace('_', ' ').title()} is working...**")
+                # Check if multi_data_agent is selected - use special handler
+                if st.session_state.current_agent == "multi_data_agent":
+                    # Run multi-agent with live trace streaming
+                    with st.chat_message("assistant"):
+                        # Header showing agent is working
+                        status_placeholder = st.empty()
+                        status_placeholder.markdown("**🔄 Multi-Agent Data Orchestrator initializing...**")
 
-                    # Create expander for real-time trace - starts expanded
-                    with st.expander("🔍 ReAct Execution Trace (Live)", expanded=True):
-                        trace_container = st.container()
+                        # Create expander for real-time trace - starts expanded
+                        with st.expander("🤖 Multi-Agent Workflow Trace (Live)", expanded=True):
+                            trace_container = st.container()
 
-                    # Placeholder for the final answer
-                    answer_placeholder = st.empty()
+                        # Placeholder for the final answer
+                        answer_placeholder = st.empty()
 
-                    # Run with streaming
-                    result = run_agent_with_streaming(prompt, trace_container, answer_placeholder)
-                    final_answer = get_final_answer(result)
+                        # Run with streaming
+                        result = run_multi_agent_with_streaming(prompt, trace_container, status_placeholder)
 
-                    # Clear the status and show final answer
-                    status_placeholder.empty()
-                    answer_placeholder.markdown(f"""
-                    <div class="final-answer">
-                        <strong>✅ Final Answer:</strong><br><br>
-                        {final_answer}
-                    </div>
-                    """, unsafe_allow_html=True)
+                        # Get final answer
+                        final_answer = result.get("final_answer") or result.get("general_answer") or "No result generated."
 
-                    # Store in history
-                    st.session_state.messages.append({
-                        "role": "assistant",
-                        "content": final_answer,
-                        "trace": result
-                    })
+                        # Clear the status and show final answer
+                        status_placeholder.empty()
 
-                    # Store execution history
-                    st.session_state.execution_history.append({
-                        "timestamp": datetime.now().isoformat(),
-                        "agent": st.session_state.current_agent,
-                        "mission": prompt,
-                        "result": result
-                    })
+                        # Show SQL if generated
+                        if result.get("generated_sql"):
+                            answer_placeholder.markdown("**Generated SQL:**")
+                            st.code(result["generated_sql"], language="sql")
 
-                    # Store in memory for future reference
-                    token_stats = result.get("token_stats", {})
-                    total_tokens = token_stats.get("total_tokens", 0)
-                    store_in_memory(prompt, final_answer, st.session_state.current_agent, total_tokens)
+                            # Show confidence
+                            confidence = result.get("overall_confidence", 0)
+                            if confidence > 0:
+                                conf_color = "#4caf50" if confidence >= 0.9 else "#ff9800" if confidence >= 0.7 else "#f44336"
+                                st.markdown(f'<span style="color: {conf_color}; font-weight: bold;">Validation Confidence: {confidence:.0%}</span>', unsafe_allow_html=True)
 
-                    # Rerun to update sidebar token display
-                    st.rerun()
+                        # Show final answer
+                        st.markdown(f"""
+                        <div class="final-answer">
+                            <strong>✅ Final Answer:</strong><br><br>
+                            {final_answer}
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                        # Store in history with special multi-agent flag
+                        st.session_state.messages.append({
+                            "role": "assistant",
+                            "content": final_answer,
+                            "trace": result,
+                            "is_multi_agent": True
+                        })
+
+                        # Store execution history
+                        st.session_state.execution_history.append({
+                            "timestamp": datetime.now().isoformat(),
+                            "agent": st.session_state.current_agent,
+                            "mission": prompt,
+                            "result": result
+                        })
+
+                        # Store in memory for future reference
+                        token_stats = result.get("token_stats", {})
+                        total_tokens = token_stats.get("total_tokens", 0)
+                        store_in_memory(prompt, final_answer, st.session_state.current_agent, total_tokens)
+
+                        # Rerun to update sidebar token display
+                        st.rerun()
+                else:
+                    # Run standard agent with real-time streaming
+                    with st.chat_message("assistant"):
+                        # Header showing agent is working
+                        status_placeholder = st.empty()
+                        status_placeholder.markdown(f"**🔄 {st.session_state.current_agent.replace('_', ' ').title()} is working...**")
+
+                        # Create expander for real-time trace - starts expanded
+                        with st.expander("🔍 ReAct Execution Trace (Live)", expanded=True):
+                            trace_container = st.container()
+
+                        # Placeholder for the final answer
+                        answer_placeholder = st.empty()
+
+                        # Run with streaming
+                        result = run_agent_with_streaming(prompt, trace_container, answer_placeholder)
+                        final_answer = get_final_answer(result)
+
+                        # Clear the status and show final answer
+                        status_placeholder.empty()
+                        answer_placeholder.markdown(f"""
+                        <div class="final-answer">
+                            <strong>✅ Final Answer:</strong><br><br>
+                            {final_answer}
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                        # Store in history
+                        st.session_state.messages.append({
+                            "role": "assistant",
+                            "content": final_answer,
+                            "trace": result
+                        })
+
+                        # Store execution history
+                        st.session_state.execution_history.append({
+                            "timestamp": datetime.now().isoformat(),
+                            "agent": st.session_state.current_agent,
+                            "mission": prompt,
+                            "result": result
+                        })
+
+                        # Store in memory for future reference
+                        token_stats = result.get("token_stats", {})
+                        total_tokens = token_stats.get("total_tokens", 0)
+                        store_in_memory(prompt, final_answer, st.session_state.current_agent, total_tokens)
+
+                        # Rerun to update sidebar token display
+                        st.rerun()
 
 
 if __name__ == "__main__":
