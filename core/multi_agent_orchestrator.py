@@ -26,6 +26,87 @@ from langgraph.graph.message import add_messages
 
 from core.config import FrameworkConfig, get_config
 import re
+from collections import deque
+from dataclasses import dataclass, field
+from typing import Deque
+
+
+# =============================================================================
+# QUERY CACHE FOR FOLLOW-UP DETECTION
+# =============================================================================
+
+@dataclass
+class CachedQuery:
+    """Represents a cached query with its SQL and results."""
+    nl_query: str
+    generated_sql: str
+    query_results: str
+    timestamp: str
+    tables_used: List[str] = field(default_factory=list)
+
+
+class QueryCache:
+    """
+    Cache for storing the last N queries for follow-up detection.
+    Uses a deque for efficient FIFO operations.
+    """
+    _instance = None
+    _max_size: int = 3
+
+    def __new__(cls):
+        """Singleton pattern to ensure one cache instance."""
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._cache: Deque[CachedQuery] = deque(maxlen=cls._max_size)
+        return cls._instance
+
+    def add_query(self, nl_query: str, generated_sql: str, query_results: str, tables_used: List[str] = None):
+        """Add a new query to the cache."""
+        cached = CachedQuery(
+            nl_query=nl_query,
+            generated_sql=generated_sql,
+            query_results=query_results,
+            timestamp=datetime.now().isoformat(),
+            tables_used=tables_used or []
+        )
+        self._cache.append(cached)
+
+    def get_recent_queries(self) -> List[CachedQuery]:
+        """Get all cached queries, most recent last."""
+        return list(self._cache)
+
+    def get_context_for_followup(self) -> str:
+        """Get formatted context string for follow-up detection."""
+        if not self._cache:
+            return "No previous queries in this session."
+
+        context_parts = []
+        for i, cached in enumerate(self._cache, 1):
+            # Truncate results if too long
+            results_preview = cached.query_results[:500] + "..." if len(cached.query_results) > 500 else cached.query_results
+            context_parts.append(f"""
+--- Previous Query {i} ---
+Question: {cached.nl_query}
+SQL Generated: {cached.generated_sql}
+Results Preview: {results_preview}
+Tables Used: {', '.join(cached.tables_used) if cached.tables_used else 'Unknown'}
+""")
+        return "\n".join(context_parts)
+
+    def get_last_query(self) -> Optional[CachedQuery]:
+        """Get the most recent cached query."""
+        return self._cache[-1] if self._cache else None
+
+    def clear(self):
+        """Clear the cache."""
+        self._cache.clear()
+
+    def __len__(self):
+        return len(self._cache)
+
+
+# Global cache instance
+query_cache = QueryCache()
 
 
 def format_sql(sql: str) -> str:
@@ -136,6 +217,14 @@ class MultiAgentState(TypedDict):
     related_tables: List[str]
     relationships: List[str]
 
+    # Query Intent Detection
+    is_modified_query: bool  # User wants to modify/filter previous query (needs new SQL)
+    is_followup_question: bool  # User asks question about previous results (answer from cache)
+    followup_context: Optional[Dict[str, Any]]  # Contains previous query info
+    previous_sql: Optional[str]  # SQL from previous query
+    previous_results: Optional[str]  # Results from previous query
+    followup_answer: Optional[str]  # Direct answer from cache for followup questions
+
     # Agent2 outputs
     extracted_schema: Dict[str, Any]
 
@@ -178,7 +267,7 @@ class MultiAgentDataOrchestrator:
 
     # Agent definitions for trace display
     AGENT_INFO = {
-        "agent1": {"name": "Pre-validation Agent", "icon": "🔍"},
+        "agent1": {"name": "Intent Classification Agent", "icon": "🔍"},
         "agent2": {"name": "Schema Extraction Agent", "icon": "📋"},
         "agent3": {"name": "Query Orchestrator Agent", "icon": "🎯"},
         "agent4": {"name": "SQL Generator Agent", "icon": "⚙️"},
@@ -323,68 +412,130 @@ class MultiAgentDataOrchestrator:
         return workflow.compile()
 
     # =========================================================================
-    # AGENT 1: Pre-validation Agent
+    # AGENT 1: Intent Classification Agent
     # =========================================================================
     def _agent1_prevalidation(self, state: MultiAgentState) -> Dict[str, Any]:
         """
-        Agent1: Pre-validation Agent
-        - Determines if the query is data-related or a general question
-        - Identifies related tables and relationships
+        Agent1: Intent Classification Agent
+        Classifies user query into one of four intents:
+        1. NEW_DATA_QUERY: Fresh query requiring SQL generation
+        2. MODIFIED_QUERY: Modify/filter previous query (needs new SQL with context)
+        3. FOLLOWUP_QUESTION: Question about previous results (answer from cache)
+        4. GENERAL_QUESTION: Non-data question (answer directly)
         """
         nl_query = state["nl_query"]
         schema_summary = self._get_schema_summary()
 
-        prompt = f"""You are a data query pre-validation agent. Your job is to analyze user queries and determine:
-1. Is this query related to the data/database (requiring SQL), OR can it be answered directly by an LLM?
-2. If data-related, which tables and relationships are needed?
+        # Get previous query context from cache
+        previous_context = query_cache.get_context_for_followup()
+        last_query = query_cache.get_last_query()
+        has_previous_queries = len(query_cache) > 0
+
+        # Build the prompt with context
+        cache_section = ""
+        if has_previous_queries:
+            cache_section = f"""
+PREVIOUS QUERIES IN THIS SESSION (for context):
+{previous_context}
+"""
+
+        prompt = f"""You are an intent classification agent. Analyze the user's query and classify it into ONE of these intents:
+
+1. **NEW_DATA_QUERY**: A fresh data query that needs SQL generation
+   - No reference to previous queries
+   - Asking for specific data from the database
+   - Examples: "Show me all clients", "List portfolios with value > 1M"
+
+2. **MODIFIED_QUERY**: User wants to modify/filter/extend the previous query (needs NEW SQL)
+   - References previous query but needs different/additional data
+   - Wants to filter, sort, group, or expand previous results
+   - Examples: "Show only the ones from UAE", "Add their email addresses", "Sort by value descending"
+
+3. **FOLLOWUP_QUESTION**: User asks a question ABOUT the previous results (answer from CACHE, no new SQL)
+   - Asking for analysis, summary, or explanation of existing results
+   - Can be answered by looking at the cached query results
+   - Examples: "What's the total?", "Which one has the highest value?", "How many are there?", "Summarize this"
+
+4. **GENERAL_QUESTION**: Non-data question that doesn't need database access
+   - General knowledge questions
+   - Questions about SQL syntax or concepts
+   - Examples: "What is SQL?", "How do JOINs work?"
 
 AVAILABLE DATABASE SCHEMA:
 {schema_summary}
+{cache_section}
+CURRENT USER QUERY: {nl_query}
 
-USER QUERY: {nl_query}
-
-Analyze this query and respond in the following JSON format:
+Respond in JSON format:
 {{
-    "is_data_query": true/false,
-    "reasoning": "Your reasoning for this decision",
-    "general_answer": "If is_data_query is false, provide the answer here. Otherwise null.",
-    "related_tables": ["TABLE1", "TABLE2"],  // Only if is_data_query is true
-    "relationships": ["TABLE1.COL -> TABLE2.COL"]  // Only if is_data_query is true
+    "intent": "NEW_DATA_QUERY" | "MODIFIED_QUERY" | "FOLLOWUP_QUESTION" | "GENERAL_QUESTION",
+    "reasoning": "Why you classified it this way",
+    "related_tables": ["TABLE1", "TABLE2"],
+    "relationships": ["TABLE1.COL -> TABLE2.COL"],
+    "general_answer": "If GENERAL_QUESTION, provide the answer here. Otherwise null.",
+    "followup_answer": "If FOLLOWUP_QUESTION, analyze the cached results and provide answer here. Otherwise null.",
+    "modification_type": "filter/aggregate/sort/expand/new"
 }}
 
-GUIDELINES:
-- If the query asks about specific data, counts, calculations, or needs database lookup -> is_data_query: true
-- If the query is about general concepts, explanations, or doesn't need database data -> is_data_query: false
-- For data queries, identify ALL tables that might be needed
-- Include relationship information for JOINs
+IMPORTANT GUIDELINES:
+- FOLLOWUP_QUESTION: The answer must come from analyzing the CACHED RESULTS shown above. Do NOT suggest running new SQL.
+- MODIFIED_QUERY: Requires generating NEW SQL that builds upon the previous query context.
+- For MODIFIED_QUERY, include ALL relevant tables (previous + new).
+- If no previous queries exist, cannot be MODIFIED_QUERY or FOLLOWUP_QUESTION.
 
 Respond ONLY with the JSON, no additional text."""
 
         response = self.llm.invoke([HumanMessage(content=prompt)])
 
         try:
-            # Parse JSON response
             result = json.loads(response.content.strip())
-
-            is_data_query = result.get("is_data_query", True)
-            general_answer = result.get("general_answer")
+            intent = result.get("intent", "NEW_DATA_QUERY")
+            reasoning = result.get("reasoning", "")
             related_tables = result.get("related_tables", [])
             relationships = result.get("relationships", [])
-            reasoning = result.get("reasoning", "")
+            general_answer = result.get("general_answer")
+            followup_answer = result.get("followup_answer")
+            modification_type = result.get("modification_type", "new")
 
         except json.JSONDecodeError:
-            # Default to treating as data query if parsing fails
-            is_data_query = True
-            general_answer = None
+            intent = "NEW_DATA_QUERY"
+            reasoning = "Failed to parse response, defaulting to new data query"
             related_tables = []
             relationships = []
-            reasoning = "Failed to parse response, defaulting to data query"
+            general_answer = None
+            followup_answer = None
+            modification_type = "new"
 
-        # Create trace for this agent
-        if is_data_query:
-            output_summary = f"Data query detected. Related tables: {', '.join(related_tables) if related_tables else 'analyzing...'}"
+        # Determine intent flags
+        is_data_query = intent in ["NEW_DATA_QUERY", "MODIFIED_QUERY"]
+        is_modified_query = intent == "MODIFIED_QUERY"
+        is_followup_question = intent == "FOLLOWUP_QUESTION"
+
+        # Build context for modified queries
+        followup_context = None
+        previous_sql = None
+        previous_results = None
+
+        if (is_modified_query or is_followup_question) and last_query:
+            followup_context = {
+                "previous_nl_query": last_query.nl_query,
+                "previous_sql": last_query.generated_sql,
+                "previous_results": last_query.query_results,
+                "tables_used": last_query.tables_used,
+                "modification_type": modification_type
+            }
+            previous_sql = last_query.generated_sql
+            previous_results = last_query.query_results
+
+        # Create output summary based on intent
+        if intent == "NEW_DATA_QUERY":
+            output_summary = f"New data query. Related tables: {', '.join(related_tables) if related_tables else 'analyzing...'}"
+        elif intent == "MODIFIED_QUERY":
+            output_summary = f"Modified query ({modification_type}). Related tables: {', '.join(related_tables) if related_tables else 'analyzing...'}"
+        elif intent == "FOLLOWUP_QUESTION":
+            output_summary = "Follow-up question - answering from cached results"
         else:
-            output_summary = "General question - will answer directly without SQL"
+            output_summary = "General question - answering directly"
 
         trace = self._create_trace(
             agent_id="agent1",
@@ -392,17 +543,34 @@ Respond ONLY with the JSON, no additional text."""
             input_summary=f"Query: {nl_query[:100]}{'...' if len(nl_query) > 100 else ''}",
             output_summary=output_summary,
             details={
+                "intent": intent,
                 "is_data_query": is_data_query,
+                "is_modified_query": is_modified_query,
+                "is_followup_question": is_followup_question,
+                "modification_type": modification_type if is_modified_query else None,
                 "related_tables": related_tables,
-                "relationships": relationships,
-                "reasoning": reasoning
+                "reasoning": reasoning,
+                "cached_queries_count": len(query_cache)
             }
         )
+
+        # Set final answer for non-SQL intents
+        final_general_answer = None
+        if intent == "GENERAL_QUESTION":
+            final_general_answer = general_answer
+        elif intent == "FOLLOWUP_QUESTION":
+            final_general_answer = followup_answer
 
         return {
             "messages": [response],
             "is_data_query": is_data_query,
-            "general_answer": general_answer,
+            "is_modified_query": is_modified_query,
+            "is_followup_question": is_followup_question,
+            "followup_context": followup_context,
+            "previous_sql": previous_sql,
+            "previous_results": previous_results,
+            "followup_answer": followup_answer,
+            "general_answer": final_general_answer,
             "related_tables": related_tables,
             "relationships": relationships,
             "current_agent": "agent1_prevalidation",
@@ -410,9 +578,14 @@ Respond ONLY with the JSON, no additional text."""
         }
 
     def _route_after_prevalidation(self, state: MultiAgentState) -> Literal["schema_extraction", "end"]:
-        """Route after pre-validation based on query type."""
+        """Route after pre-validation based on query intent."""
+        # Follow-up questions are answered from cache - skip SQL generation
+        if state.get("is_followup_question", False):
+            return "end"
+        # Data queries (new or modified) need SQL generation
         if state.get("is_data_query", True):
             return "schema_extraction"
+        # General questions don't need SQL
         return "end"
 
     # =========================================================================
@@ -627,13 +800,43 @@ Generate a CORRECTED query that addresses all the above issues."""
                                 validation_feedback: str, state: MultiAgentState,
                                 retry_count: int) -> Dict[str, Any]:
         """Agent 4.1: Generate simple SQL query."""
+
+        # Build follow-up context section if this is a follow-up query
+        followup_section = ""
+        followup_context = state.get("followup_context")
+        if followup_context and state.get("is_modified_query", False):
+            previous_sql = followup_context.get("previous_sql", "")
+            previous_results = followup_context.get("previous_results_preview", "")
+            modification_type = followup_context.get("modification_type", "")
+            previous_nl = followup_context.get("previous_nl_query", "")
+
+            followup_section = f"""
+
+FOLLOW-UP QUERY CONTEXT:
+This is a follow-up to a previous query. Use this context to generate a more accurate query.
+
+Previous Question: {previous_nl}
+Previous SQL:
+{previous_sql}
+
+Previous Results Preview:
+{previous_results[:800]}{'...' if len(previous_results) > 800 else ''}
+
+Modification Type: {modification_type}
+- If "filter": Add additional WHERE clauses to filter the previous results
+- If "aggregate": Add aggregations (SUM, COUNT, AVG) to the query
+- If "detail": Expand the query to include more columns or related data
+
+IMPORTANT: Build upon or modify the previous query based on the user's new request.
+"""
+
         prompt = f"""You are an expert SQL generator. Generate a SQL query for the following request.
 
 USER QUERY: {nl_query}
 
 AVAILABLE SCHEMA:
 {schema_str}
-{validation_feedback}
+{followup_section}{validation_feedback}
 
 Generate a SQL query that:
 1. Uses the correct table and column names from the schema
@@ -698,6 +901,31 @@ Respond ONLY with the JSON, no additional text."""
         """Agent 4.2: Generate complex SQL query with CTEs."""
         subtasks_str = "\n".join(f"{i+1}. {task}" for i, task in enumerate(subtasks))
 
+        # Build follow-up context section if this is a follow-up query
+        followup_section = ""
+        followup_context = state.get("followup_context")
+        if followup_context and state.get("is_modified_query", False):
+            previous_sql = followup_context.get("previous_sql", "")
+            previous_results = followup_context.get("previous_results_preview", "")
+            modification_type = followup_context.get("modification_type", "")
+            previous_nl = followup_context.get("previous_nl_query", "")
+
+            followup_section = f"""
+
+FOLLOW-UP QUERY CONTEXT:
+This is a follow-up to a previous query. Use this context to generate a more accurate query.
+
+Previous Question: {previous_nl}
+Previous SQL:
+{previous_sql}
+
+Previous Results Preview:
+{previous_results[:800]}{'...' if len(previous_results) > 800 else ''}
+
+Modification Type: {modification_type}
+IMPORTANT: Build upon or modify the previous query based on the user's new request. Consider incorporating the previous SQL as a CTE if useful.
+"""
+
         prompt = f"""You are an expert SQL generator specializing in complex queries with CTEs.
 
 USER QUERY: {nl_query}
@@ -707,7 +935,7 @@ SUBTASKS TO ADDRESS:
 
 AVAILABLE SCHEMA:
 {schema_str}
-{validation_feedback}
+{followup_section}{validation_feedback}
 
 Generate a complex SQL query using CTEs (Common Table Expressions) that:
 1. Creates separate CTEs for each logical subtask
@@ -1148,9 +1376,22 @@ Your response should be conversational and helpful."""
             "validation_results": state.get("validation_results", {}),
             "query_results": state.get("query_results", ""),
             "final_answer": state.get("final_answer", ""),  # Always preserve final_answer
+            "is_data_query": state.get("is_data_query", False),  # For cache update
+            "related_tables": state.get("related_tables", []),   # For cache update
+            "is_followup_question": state.get("is_followup_question", False),
+            "is_modified_query": state.get("is_modified_query", False),
         }
 
-        # Case 1: General question answered by LLM
+        # Case 1: Follow-up question - answer from cache (no SQL needed)
+        if state.get("is_followup_question", False):
+            followup_answer = state.get("followup_answer") or state.get("general_answer")
+            return {
+                **preserved_fields,
+                "final_answer": followup_answer or "I couldn't determine an answer from the previous results.",
+                "is_complete": True
+            }
+
+        # Case 2: General question answered by LLM
         if not state.get("is_data_query", True):
             return {
                 **preserved_fields,
@@ -1215,6 +1456,14 @@ Please try rephrasing your question or providing more specific details about wha
             "general_answer": None,
             "related_tables": [],
             "relationships": [],
+            # Query intent fields
+            "is_modified_query": False,
+            "is_followup_question": False,
+            "followup_context": None,
+            "previous_sql": None,
+            "previous_results": None,
+            "followup_answer": None,
+            # Other fields
             "extracted_schema": {},
             "query_complexity": "SIMPLE",
             "subtasks": [],
@@ -1237,6 +1486,16 @@ Please try rephrasing your question or providing more specific details about wha
         try:
             # Create a custom graph with retry logic
             final_state = self._run_with_retry(initial_state)
+
+            # Cache the successful query for follow-up detection
+            if final_state.get("is_data_query", False) and final_state.get("generated_sql"):
+                query_cache.add_query(
+                    nl_query=query,
+                    generated_sql=final_state.get("generated_sql", ""),
+                    query_results=final_state.get("query_results", ""),
+                    tables_used=final_state.get("related_tables", [])
+                )
+
             return final_state
         except Exception as e:
             return {
@@ -1285,6 +1544,14 @@ Please try rephrasing your question or providing more specific details about wha
             "general_answer": None,
             "related_tables": [],
             "relationships": [],
+            # Query intent fields
+            "is_modified_query": False,
+            "is_followup_question": False,
+            "followup_context": None,
+            "previous_sql": None,
+            "previous_results": None,
+            "followup_answer": None,
+            # Other fields
             "extracted_schema": {},
             "query_complexity": "SIMPLE",
             "subtasks": [],
@@ -1307,6 +1574,8 @@ Please try rephrasing your question or providing more specific details about wha
         try:
             for state in self.graph.stream(initial_state):
                 yield state
+            # Note: Cache update is handled by the caller (app.py) after streaming completes
+            # This ensures proper access to the final state
         except Exception as e:
             yield {"error": str(e)}
 
@@ -1352,15 +1621,47 @@ Please try rephrasing your question or providing more specific details about wha
         """Get information about the multi-agent workflow."""
         return {
             "name": "Multi-Agent Data Orchestrator",
-            "description": "6-agent workflow for sophisticated SQL generation with validation",
+            "description": "6-agent workflow for SQL generation with intent classification and caching",
             "agents": [
-                {"id": "agent1", "name": "Pre-validation", "description": "Validates if query is data-related"},
+                {"id": "agent1", "name": "Intent Classification", "description": "Classifies: NEW_DATA_QUERY, MODIFIED_QUERY, FOLLOWUP_QUESTION, GENERAL_QUESTION"},
                 {"id": "agent2", "name": "Schema Extraction", "description": "Extracts relevant schema (no LLM)"},
-                {"id": "agent3", "name": "Orchestrator", "description": "Determines query complexity"},
-                {"id": "agent4", "name": "SQL Generator", "description": "Generates SQL queries"},
+                {"id": "agent3", "name": "Orchestrator", "description": "Determines query complexity (SIMPLE/COMPLEX)"},
+                {"id": "agent4", "name": "SQL Generator", "description": "Generates SQL queries (with modified query context)"},
                 {"id": "agent5", "name": "Validator", "description": "Multi-level SQL validation"},
                 {"id": "agent6", "name": "Executor", "description": "Executes SQL and presents results"}
             ],
+            "intents": [
+                {"name": "NEW_DATA_QUERY", "description": "Fresh query requiring SQL generation"},
+                {"name": "MODIFIED_QUERY", "description": "Modify previous query (needs new SQL)"},
+                {"name": "FOLLOWUP_QUESTION", "description": "Question about results (answer from cache)"},
+                {"name": "GENERAL_QUESTION", "description": "Non-data question"}
+            ],
             "max_retries": 3,
-            "validation_threshold": 0.75
+            "validation_threshold": 0.75,
+            "cache_size": 3,
+            "cached_queries": len(query_cache)
         }
+
+    # =========================================================================
+    # Cache Management Methods
+    # =========================================================================
+    def get_cached_queries(self) -> List[Dict[str, Any]]:
+        """Get all cached queries for display/debugging."""
+        return [
+            {
+                "nl_query": q.nl_query,
+                "generated_sql": q.generated_sql,
+                "results_preview": q.query_results[:200] + "..." if len(q.query_results) > 200 else q.query_results,
+                "tables_used": q.tables_used,
+                "timestamp": q.timestamp
+            }
+            for q in query_cache.get_recent_queries()
+        ]
+
+    def clear_query_cache(self):
+        """Clear the query cache."""
+        query_cache.clear()
+
+    def get_cache_size(self) -> int:
+        """Get the number of cached queries."""
+        return len(query_cache)

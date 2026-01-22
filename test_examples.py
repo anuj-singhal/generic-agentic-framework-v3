@@ -1118,6 +1118,380 @@ Show portfolio name, month, transaction count, and growth percentage.""",
 ]
 
 
+# =============================================================================
+# INTENT CLASSIFICATION EXAMPLES (Conversation Continuity)
+# =============================================================================
+# These examples demonstrate the intent classification feature:
+# - NEW_DATA_QUERY: Fresh query requiring SQL generation
+# - MODIFIED_QUERY: Modify/filter previous query (needs new SQL with context)
+# - FOLLOWUP_QUESTION: Question about previous results (answer from cache, no SQL)
+# - GENERAL_QUESTION: Non-data question
+#
+# Run examples in sequence within the same conversation_id to test caching.
+
+# =============================================================================
+# MODIFIED QUERY EXAMPLES (Need new SQL based on previous context)
+# =============================================================================
+
+MODIFIED_QUERY_SIMPLE_EXAMPLES = [
+    # Conversation 1: Simple client query with modifications
+    {
+        "name": "Modified Simple - Initial Query",
+        "agent": "multi_data_agent",
+        "query": "Show me all clients in the database",
+        "expected_tools": ["run_multi_agent_query"],
+        "description": "Initial query - NEW_DATA_QUERY intent",
+        "conversation_id": "conv1",
+        "sequence": 1,
+        "intent_type": "NEW_DATA_QUERY"
+    },
+    {
+        "name": "Modified Simple - Filter by Country",
+        "agent": "multi_data_agent",
+        "query": "Show me only the ones from USA",
+        "expected_tools": ["run_multi_agent_query"],
+        "description": "MODIFIED_QUERY - filter previous results by country (needs new SQL)",
+        "conversation_id": "conv1",
+        "sequence": 2,
+        "intent_type": "MODIFIED_QUERY"
+    },
+    {
+        "name": "Modified Simple - Sort Results",
+        "agent": "multi_data_agent",
+        "query": "Sort them by name alphabetically",
+        "expected_tools": ["run_multi_agent_query"],
+        "description": "MODIFIED_QUERY - sort previous results (needs new SQL)",
+        "conversation_id": "conv1",
+        "sequence": 3,
+        "intent_type": "MODIFIED_QUERY"
+    },
+    # Conversation 2: Portfolio modifications
+    {
+        "name": "Modified Simple - Portfolio Query",
+        "agent": "multi_data_agent",
+        "query": "Show me all portfolios",
+        "expected_tools": ["run_multi_agent_query"],
+        "description": "Initial query - NEW_DATA_QUERY intent",
+        "conversation_id": "conv2",
+        "sequence": 1,
+        "intent_type": "NEW_DATA_QUERY"
+    },
+    {
+        "name": "Modified Simple - Add Columns",
+        "agent": "multi_data_agent",
+        "query": "Add the client name to those results",
+        "expected_tools": ["run_multi_agent_query"],
+        "description": "MODIFIED_QUERY - expand with additional columns (needs new SQL with JOIN)",
+        "conversation_id": "conv2",
+        "sequence": 2,
+        "intent_type": "MODIFIED_QUERY"
+    },
+]
+
+MODIFIED_QUERY_MEDIUM_EXAMPLES = [
+    # Conversation 3: Client-Portfolio analysis with modifications
+    {
+        "name": "Modified Medium - Initial Join Query",
+        "agent": "multi_data_agent",
+        "query": "Show me all clients along with their portfolio names and currencies",
+        "expected_tools": ["run_multi_agent_query"],
+        "description": "Initial query - NEW_DATA_QUERY intent",
+        "conversation_id": "conv3",
+        "sequence": 1,
+        "intent_type": "NEW_DATA_QUERY"
+    },
+    {
+        "name": "Modified Medium - Aggregate Previous",
+        "agent": "multi_data_agent",
+        "query": "Now group by client and count their portfolios",
+        "expected_tools": ["run_multi_agent_query"],
+        "description": "MODIFIED_QUERY - aggregate from previous context (needs new SQL)",
+        "conversation_id": "conv3",
+        "sequence": 2,
+        "intent_type": "MODIFIED_QUERY"
+    },
+    {
+        "name": "Modified Medium - Filter Aggregation",
+        "agent": "multi_data_agent",
+        "query": "Show only clients with more than one portfolio",
+        "expected_tools": ["run_multi_agent_query"],
+        "description": "MODIFIED_QUERY - filter the aggregated results (needs new SQL with HAVING)",
+        "conversation_id": "conv3",
+        "sequence": 3,
+        "intent_type": "MODIFIED_QUERY"
+    },
+    # Conversation 4: Transaction modifications
+    {
+        "name": "Modified Medium - Transaction Query",
+        "agent": "multi_data_agent",
+        "query": "Show me the top 10 transactions by value (quantity * price)",
+        "expected_tools": ["run_multi_agent_query"],
+        "description": "Initial query - NEW_DATA_QUERY intent",
+        "conversation_id": "conv4",
+        "sequence": 1,
+        "intent_type": "NEW_DATA_QUERY"
+    },
+    {
+        "name": "Modified Medium - Add Client Info",
+        "agent": "multi_data_agent",
+        "query": "For those transactions, add the client names who made them",
+        "expected_tools": ["run_multi_agent_query"],
+        "description": "MODIFIED_QUERY - expand with client details (needs new SQL with JOINs)",
+        "conversation_id": "conv4",
+        "sequence": 2,
+        "intent_type": "MODIFIED_QUERY"
+    },
+    {
+        "name": "Modified Medium - Group by Type",
+        "agent": "multi_data_agent",
+        "query": "Break this down by transaction type (BUY vs SELL)",
+        "expected_tools": ["run_multi_agent_query"],
+        "description": "MODIFIED_QUERY - group previous results (needs new SQL with GROUP BY)",
+        "conversation_id": "conv4",
+        "sequence": 3,
+        "intent_type": "MODIFIED_QUERY"
+    },
+]
+
+MODIFIED_QUERY_COMPLEX_EXAMPLES = [
+    # Conversation 5: Complex portfolio modifications
+    {
+        "name": "Modified Complex - Portfolio Valuation",
+        "agent": "multi_data_agent",
+        "query": """Calculate the total portfolio value for each client based on their holdings.
+Show client name, number of portfolios, and total holdings value (quantity * avg_cost).""",
+        "expected_tools": ["run_multi_agent_query"],
+        "description": "Initial complex query - NEW_DATA_QUERY intent",
+        "conversation_id": "conv5",
+        "sequence": 1,
+        "intent_type": "NEW_DATA_QUERY"
+    },
+    {
+        "name": "Modified Complex - Rank and Limit",
+        "agent": "multi_data_agent",
+        "query": "Rank them by total value descending and show only top 5",
+        "expected_tools": ["run_multi_agent_query"],
+        "description": "MODIFIED_QUERY - rank and limit (needs new SQL with ORDER BY/LIMIT)",
+        "conversation_id": "conv5",
+        "sequence": 2,
+        "intent_type": "MODIFIED_QUERY"
+    },
+    {
+        "name": "Modified Complex - Drill Down",
+        "agent": "multi_data_agent",
+        "query": "For the top client, show their individual asset holdings with values",
+        "expected_tools": ["run_multi_agent_query"],
+        "description": "MODIFIED_QUERY - drill down (needs new SQL for specific client)",
+        "conversation_id": "conv5",
+        "sequence": 3,
+        "intent_type": "MODIFIED_QUERY"
+    },
+]
+
+# =============================================================================
+# FOLLOWUP QUESTION EXAMPLES (Answer from cache, no new SQL)
+# =============================================================================
+
+FOLLOWUP_QUESTION_SIMPLE_EXAMPLES = [
+    # Conversation 6: Questions about client results
+    {
+        "name": "Followup Question - Initial Query",
+        "agent": "multi_data_agent",
+        "query": "Show me all clients in the database",
+        "expected_tools": ["run_multi_agent_query"],
+        "description": "Initial query - NEW_DATA_QUERY intent",
+        "conversation_id": "conv6",
+        "sequence": 1,
+        "intent_type": "NEW_DATA_QUERY"
+    },
+    {
+        "name": "Followup Question - Count",
+        "agent": "multi_data_agent",
+        "query": "How many clients are there in total?",
+        "expected_tools": ["run_multi_agent_query"],
+        "description": "FOLLOWUP_QUESTION - count from cached results (no SQL needed)",
+        "conversation_id": "conv6",
+        "sequence": 2,
+        "intent_type": "FOLLOWUP_QUESTION"
+    },
+    {
+        "name": "Followup Question - Which One",
+        "agent": "multi_data_agent",
+        "query": "Which one is from UAE?",
+        "expected_tools": ["run_multi_agent_query"],
+        "description": "FOLLOWUP_QUESTION - identify from cached results (no SQL needed)",
+        "conversation_id": "conv6",
+        "sequence": 3,
+        "intent_type": "FOLLOWUP_QUESTION"
+    },
+    # Conversation 7: Questions about portfolio results
+    {
+        "name": "Followup Question - Portfolio Initial",
+        "agent": "multi_data_agent",
+        "query": "Show me all portfolios with their values",
+        "expected_tools": ["run_multi_agent_query"],
+        "description": "Initial query - NEW_DATA_QUERY intent",
+        "conversation_id": "conv7",
+        "sequence": 1,
+        "intent_type": "NEW_DATA_QUERY"
+    },
+    {
+        "name": "Followup Question - Highest Value",
+        "agent": "multi_data_agent",
+        "query": "Which one has the highest value?",
+        "expected_tools": ["run_multi_agent_query"],
+        "description": "FOLLOWUP_QUESTION - find max from cached results (no SQL needed)",
+        "conversation_id": "conv7",
+        "sequence": 2,
+        "intent_type": "FOLLOWUP_QUESTION"
+    },
+    {
+        "name": "Followup Question - Summarize",
+        "agent": "multi_data_agent",
+        "query": "Summarize the results",
+        "expected_tools": ["run_multi_agent_query"],
+        "description": "FOLLOWUP_QUESTION - summarize cached results (no SQL needed)",
+        "conversation_id": "conv7",
+        "sequence": 3,
+        "intent_type": "FOLLOWUP_QUESTION"
+    },
+]
+
+FOLLOWUP_QUESTION_MEDIUM_EXAMPLES = [
+    # Conversation 8: Questions about transaction analysis
+    {
+        "name": "Followup Question Medium - Transaction Initial",
+        "agent": "multi_data_agent",
+        "query": "Show me the last 20 transactions with their values",
+        "expected_tools": ["run_multi_agent_query"],
+        "description": "Initial query - NEW_DATA_QUERY intent",
+        "conversation_id": "conv8",
+        "sequence": 1,
+        "intent_type": "NEW_DATA_QUERY"
+    },
+    {
+        "name": "Followup Question Medium - Total Value",
+        "agent": "multi_data_agent",
+        "query": "What is the total value of all these transactions?",
+        "expected_tools": ["run_multi_agent_query"],
+        "description": "FOLLOWUP_QUESTION - sum from cached results (no SQL needed)",
+        "conversation_id": "conv8",
+        "sequence": 2,
+        "intent_type": "FOLLOWUP_QUESTION"
+    },
+    {
+        "name": "Followup Question Medium - Average",
+        "agent": "multi_data_agent",
+        "query": "What's the average transaction value?",
+        "expected_tools": ["run_multi_agent_query"],
+        "description": "FOLLOWUP_QUESTION - average from cached results (no SQL needed)",
+        "conversation_id": "conv8",
+        "sequence": 3,
+        "intent_type": "FOLLOWUP_QUESTION"
+    },
+    {
+        "name": "Followup Question Medium - Explain",
+        "agent": "multi_data_agent",
+        "query": "Explain what these results show",
+        "expected_tools": ["run_multi_agent_query"],
+        "description": "FOLLOWUP_QUESTION - explain cached results (no SQL needed)",
+        "conversation_id": "conv8",
+        "sequence": 4,
+        "intent_type": "FOLLOWUP_QUESTION"
+    },
+]
+
+FOLLOWUP_QUESTION_COMPLEX_EXAMPLES = [
+    # Conversation 9: Complex analysis questions
+    {
+        "name": "Followup Question Complex - Risk Analysis Initial",
+        "agent": "multi_data_agent",
+        "query": """Show me clients grouped by risk profile with:
+- Number of clients per profile
+- Total portfolio value per profile""",
+        "expected_tools": ["run_multi_agent_query"],
+        "description": "Initial complex query - NEW_DATA_QUERY intent",
+        "conversation_id": "conv9",
+        "sequence": 1,
+        "intent_type": "NEW_DATA_QUERY"
+    },
+    {
+        "name": "Followup Question Complex - Compare Profiles",
+        "agent": "multi_data_agent",
+        "query": "Which risk profile has the most clients?",
+        "expected_tools": ["run_multi_agent_query"],
+        "description": "FOLLOWUP_QUESTION - compare from cached results (no SQL needed)",
+        "conversation_id": "conv9",
+        "sequence": 2,
+        "intent_type": "FOLLOWUP_QUESTION"
+    },
+    {
+        "name": "Followup Question Complex - Insight",
+        "agent": "multi_data_agent",
+        "query": "What insights can you derive from this data?",
+        "expected_tools": ["run_multi_agent_query"],
+        "description": "FOLLOWUP_QUESTION - analyze cached results (no SQL needed)",
+        "conversation_id": "conv9",
+        "sequence": 3,
+        "intent_type": "FOLLOWUP_QUESTION"
+    },
+    {
+        "name": "Followup Question Complex - Pattern",
+        "agent": "multi_data_agent",
+        "query": "Is there a correlation between risk profile and portfolio value?",
+        "expected_tools": ["run_multi_agent_query"],
+        "description": "FOLLOWUP_QUESTION - pattern analysis from cached results (no SQL needed)",
+        "conversation_id": "conv9",
+        "sequence": 4,
+        "intent_type": "FOLLOWUP_QUESTION"
+    },
+]
+
+# =============================================================================
+# NEW QUERY EXAMPLES (Fresh queries that should not reference previous context)
+# =============================================================================
+
+NEW_QUERY_EXAMPLES = [
+    {
+        "name": "New Query - Unrelated Topic",
+        "agent": "multi_data_agent",
+        "query": "What assets are available in the database?",
+        "expected_tools": ["run_multi_agent_query"],
+        "description": "NEW_DATA_QUERY - unrelated to previous queries",
+        "intent_type": "NEW_DATA_QUERY"
+    },
+    {
+        "name": "New Query - Different Domain",
+        "agent": "multi_data_agent",
+        "query": "Show me all cryptocurrency assets",
+        "expected_tools": ["run_multi_agent_query"],
+        "description": "NEW_DATA_QUERY - different data domain",
+        "intent_type": "NEW_DATA_QUERY"
+    },
+    {
+        "name": "New Query - General Question",
+        "agent": "multi_data_agent",
+        "query": "What is the difference between ETF and Equity?",
+        "expected_tools": ["run_multi_agent_query"],
+        "description": "GENERAL_QUESTION - answered directly without SQL",
+        "intent_type": "GENERAL_QUESTION"
+    },
+    {
+        "name": "New Query - SQL Syntax Question",
+        "agent": "multi_data_agent",
+        "query": "How do I use GROUP BY with HAVING in SQL?",
+        "expected_tools": ["run_multi_agent_query"],
+        "description": "GENERAL_QUESTION - SQL concept explanation",
+        "intent_type": "GENERAL_QUESTION"
+    },
+]
+
+# Backward compatibility aliases
+FOLLOWUP_SIMPLE_EXAMPLES = MODIFIED_QUERY_SIMPLE_EXAMPLES + FOLLOWUP_QUESTION_SIMPLE_EXAMPLES
+FOLLOWUP_MEDIUM_EXAMPLES = MODIFIED_QUERY_MEDIUM_EXAMPLES + FOLLOWUP_QUESTION_MEDIUM_EXAMPLES
+FOLLOWUP_COMPLEX_EXAMPLES = MODIFIED_QUERY_COMPLEX_EXAMPLES + FOLLOWUP_QUESTION_COMPLEX_EXAMPLES
+
+
 def print_examples():
     """Print all examples in a formatted way."""
 
@@ -1139,6 +1513,13 @@ def print_examples():
         ("🤖 MULTI-DATA-AGENT SIMPLE", MULTI_DATA_AGENT_SIMPLE_EXAMPLES),
         ("🤖 MULTI-DATA-AGENT MEDIUM", MULTI_DATA_AGENT_MEDIUM_EXAMPLES),
         ("🤖 MULTI-DATA-AGENT COMPLEX", MULTI_DATA_AGENT_COMPLEX_EXAMPLES),
+        ("✏️ MODIFIED QUERY SIMPLE", MODIFIED_QUERY_SIMPLE_EXAMPLES),
+        ("✏️ MODIFIED QUERY MEDIUM", MODIFIED_QUERY_MEDIUM_EXAMPLES),
+        ("✏️ MODIFIED QUERY COMPLEX", MODIFIED_QUERY_COMPLEX_EXAMPLES),
+        ("❓ FOLLOWUP QUESTION SIMPLE", FOLLOWUP_QUESTION_SIMPLE_EXAMPLES),
+        ("❓ FOLLOWUP QUESTION MEDIUM", FOLLOWUP_QUESTION_MEDIUM_EXAMPLES),
+        ("❓ FOLLOWUP QUESTION COMPLEX", FOLLOWUP_QUESTION_COMPLEX_EXAMPLES),
+        ("🆕 NEW QUERY EXAMPLES", NEW_QUERY_EXAMPLES),
     ]
     
     for category_name, examples in all_categories:
@@ -1173,7 +1554,11 @@ def get_example_by_name(name: str) -> dict:
         WEALTH_COMPLEX_EXAMPLES +
         MULTI_DATA_AGENT_SIMPLE_EXAMPLES +
         MULTI_DATA_AGENT_MEDIUM_EXAMPLES +
-        MULTI_DATA_AGENT_COMPLEX_EXAMPLES
+        MULTI_DATA_AGENT_COMPLEX_EXAMPLES +
+        FOLLOWUP_SIMPLE_EXAMPLES +
+        FOLLOWUP_MEDIUM_EXAMPLES +
+        FOLLOWUP_COMPLEX_EXAMPLES +
+        NEW_QUERY_EXAMPLES
     )
 
     for example in all_examples:
@@ -1201,7 +1586,11 @@ def get_examples_by_agent(agent_name: str) -> list:
         WEALTH_COMPLEX_EXAMPLES +
         MULTI_DATA_AGENT_SIMPLE_EXAMPLES +
         MULTI_DATA_AGENT_MEDIUM_EXAMPLES +
-        MULTI_DATA_AGENT_COMPLEX_EXAMPLES
+        MULTI_DATA_AGENT_COMPLEX_EXAMPLES +
+        FOLLOWUP_SIMPLE_EXAMPLES +
+        FOLLOWUP_MEDIUM_EXAMPLES +
+        FOLLOWUP_COMPLEX_EXAMPLES +
+        NEW_QUERY_EXAMPLES
     )
 
     return [ex for ex in all_examples if ex['agent'] == agent_name]
@@ -1226,10 +1615,26 @@ def get_examples_by_tool(tool_name: str) -> list:
         WEALTH_COMPLEX_EXAMPLES +
         MULTI_DATA_AGENT_SIMPLE_EXAMPLES +
         MULTI_DATA_AGENT_MEDIUM_EXAMPLES +
-        MULTI_DATA_AGENT_COMPLEX_EXAMPLES
+        MULTI_DATA_AGENT_COMPLEX_EXAMPLES +
+        FOLLOWUP_SIMPLE_EXAMPLES +
+        FOLLOWUP_MEDIUM_EXAMPLES +
+        FOLLOWUP_COMPLEX_EXAMPLES +
+        NEW_QUERY_EXAMPLES
     )
 
     return [ex for ex in all_examples if tool_name in ex['expected_tools']]
+
+
+def get_followup_conversation(conversation_id: str) -> list:
+    """Get all examples in a follow-up conversation sequence, ordered by sequence number."""
+    all_followup = (
+        FOLLOWUP_SIMPLE_EXAMPLES +
+        FOLLOWUP_MEDIUM_EXAMPLES +
+        FOLLOWUP_COMPLEX_EXAMPLES
+    )
+
+    conversation = [ex for ex in all_followup if ex.get('conversation_id') == conversation_id]
+    return sorted(conversation, key=lambda x: x.get('sequence', 0))
 
 
 if __name__ == "__main__":

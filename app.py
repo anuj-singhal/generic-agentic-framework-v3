@@ -18,6 +18,7 @@ from core.tools_base import tool_registry
 from tools.example_tools import get_all_tools
 from agents.agent_definitions import get_available_agents, create_agent, AgentFactory
 from core.token_counter import get_token_counter
+from core.multi_agent_orchestrator import query_cache
 from openai import OpenAI
 
 # DuckDB imports for database explorer
@@ -302,6 +303,50 @@ st.markdown("""
         font-size: 0.65rem;
         color: #546e7a;
         text-transform: capitalize;
+    }
+    /* Query Cache Card */
+    .cache-card {
+        background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%);
+        border: 1px solid #ffb74d;
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin: 8px 0 16px 0;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+    .cache-card-header {
+        color: #e65100;
+        font-size: 0.75rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 10px;
+    }
+    .cache-item {
+        background: white;
+        border-radius: 4px;
+        padding: 8px;
+        margin: 4px 0;
+        font-size: 0.7rem;
+        border-left: 3px solid #ff9800;
+    }
+    .cache-item-query {
+        color: #333;
+        font-weight: 500;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .cache-item-meta {
+        color: #666;
+        font-size: 0.6rem;
+        margin-top: 2px;
+    }
+    .cache-empty {
+        color: #999;
+        font-size: 0.7rem;
+        font-style: italic;
+        text-align: center;
+        padding: 10px;
     }
     /* Message token badge */
     .msg-token-badge {
@@ -691,6 +736,51 @@ def render_sidebar():
             </div>
         </div>
         """, unsafe_allow_html=True)
+
+        # ═══════════════════════════════════════════════════════════════
+        # QUERY CACHE (Intent Detection)
+        # ═══════════════════════════════════════════════════════════════
+        st.markdown('<p class="sidebar-header">🔄 Query Cache</p>', unsafe_allow_html=True)
+
+        cache_size = len(query_cache)
+        cached_queries = query_cache.get_recent_queries()
+
+        # Estimate tokens in cache (rough estimate: ~4 chars per token)
+        cache_tokens = 0
+        for q in cached_queries:
+            cache_tokens += len(q.nl_query) // 4
+            cache_tokens += len(q.generated_sql) // 4
+            cache_tokens += len(q.query_results) // 4
+
+        # Display cache info using native Streamlit components
+        col1, col2 = st.columns(2)
+        with col1:
+            st.caption(f"📊 {cache_size}/3 queries")
+        with col2:
+            st.caption(f"🎯 ~{cache_tokens:,} tokens")
+
+        if cached_queries:
+            for i, q in enumerate(reversed(cached_queries), 1):
+                query_preview = q.nl_query[:40] + "..." if len(q.nl_query) > 40 else q.nl_query
+                tables_str = ", ".join(q.tables_used[:3]) if q.tables_used else "N/A"
+                if len(q.tables_used) > 3:
+                    tables_str += f" +{len(q.tables_used) - 3}"
+
+                with st.container():
+                    st.markdown(f"""
+                    <div style="background: #fff3e0; border-left: 3px solid #ff9800; padding: 6px 10px; margin: 4px 0; border-radius: 4px;">
+                        <div style="font-size: 0.75rem; color: #333; font-weight: 500;">{i}. {query_preview}</div>
+                        <div style="font-size: 0.65rem; color: #666; margin-top: 2px;">Tables: {tables_str}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+        else:
+            st.caption("_No cached queries yet_")
+
+        # Clear cache button
+        if cache_size > 0:
+            if st.button("🗑️ Clear Cache", use_container_width=True, key="clear_cache_btn"):
+                query_cache.clear()
+                st.rerun()
 
         # ═══════════════════════════════════════════════════════════════
         # DATABASE EXPLORER (Top Priority)
@@ -1387,6 +1477,23 @@ def run_multi_agent_with_streaming(mission: str, trace_container, status_placeho
             "completion_tokens": execution_tokens // 2
         }
     }
+
+    # Update query cache for follow-up detection
+    # This is done here because the stream() generator may not complete the cache update
+    if final_state:
+        is_data_query = final_state.get("is_data_query", False)
+        generated_sql = final_state.get("generated_sql", "")
+        query_results = final_state.get("query_results", "")
+        related_tables = final_state.get("related_tables", [])
+
+        # Only cache data queries that generated SQL successfully
+        if is_data_query and generated_sql and not final_state.get("error"):
+            query_cache.add_query(
+                nl_query=mission,
+                generated_sql=generated_sql,
+                query_results=query_results,
+                tables_used=related_tables
+            )
 
     return result
 
