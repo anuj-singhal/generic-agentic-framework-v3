@@ -787,11 +787,12 @@ def render_react_trace(execution_data: Dict[str, Any]):
     """Render the ReAct execution trace or multi-agent trace."""
     # Check if this is a multi-agent trace
     agent_traces = execution_data.get("agent_traces", [])
+    messages = execution_data.get("messages", [])
+    token_stats = execution_data.get("token_stats", {})
+    total_tokens = token_stats.get("total_tokens", 0)
 
     if agent_traces:
         # Render multi-agent trace
-        token_stats = execution_data.get("token_stats", {})
-        total_tokens = token_stats.get("total_tokens", 0)
         confidence = execution_data.get("overall_confidence", 0)
 
         trace_header = "🤖 View Multi-Agent Workflow Trace"
@@ -800,15 +801,7 @@ def render_react_trace(execution_data: Dict[str, Any]):
 
         with st.expander(trace_header, expanded=False):
             # Show summary at top
-            st.markdown(f"""
-            <div style="background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%); padding: 10px 15px; border-radius: 6px; margin-bottom: 12px;">
-                <div style="font-size: 0.85rem; color: #1565c0;">
-                    <strong>Agents Executed:</strong> {len(agent_traces)} |
-                    <strong>Confidence:</strong> {confidence:.0%} |
-                    <strong>Tokens:</strong> {total_tokens:,}
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+            st.info(f"**Agents Executed:** {len(agent_traces)} | **Confidence:** {confidence:.0%} | **Tokens:** {total_tokens:,}")
 
             # Render each agent trace card
             for trace in agent_traces:
@@ -819,6 +812,12 @@ def render_react_trace(execution_data: Dict[str, Any]):
             if sql:
                 st.markdown("**Generated SQL:**")
                 st.code(sql, language="sql")
+
+        # Also render ReAct-style trace from agent traces
+        if agent_traces:
+            with st.expander("🔍 View ReAct Execution Trace (Thought/Action/Observation)", expanded=False):
+                for trace in agent_traces:
+                    render_agent_trace_as_react(trace, st)
 
         return
 
@@ -1065,7 +1064,7 @@ def get_agent_icon(agent_id: str) -> str:
 
 
 def render_agent_trace_card(trace: dict, container, expanded: bool = False):
-    """Render a single agent trace as a styled card."""
+    """Render a single agent trace as a styled card using Streamlit components."""
     agent_id = trace.get("agent_id", "unknown")
     agent_name = trace.get("agent_name", "Unknown Agent")
     status = trace.get("status", "unknown")
@@ -1073,7 +1072,6 @@ def render_agent_trace_card(trace: dict, container, expanded: bool = False):
     output_summary = trace.get("output_summary", "")
     details = trace.get("details", {})
 
-    agent_class = get_agent_class(agent_id)
     icon = get_agent_icon(agent_id)
 
     # Clean agent name (remove emoji if present)
@@ -1081,109 +1079,165 @@ def render_agent_trace_card(trace: dict, container, expanded: bool = False):
     if not clean_name:
         clean_name = agent_id.replace("_", " ").title()
 
-    status_class = f"status-{status}"
+    # Status emoji
+    status_emoji = {"completed": "✅", "running": "🔄", "failed": "❌", "skipped": "⏭️"}.get(status, "⬜")
 
-    # Build details HTML
-    details_html = ""
+    # Border colors by agent type
+    border_colors = {
+        "agent1": "#1976d2",
+        "agent2": "#7b1fa2",
+        "agent3": "#ef6c00",
+        "agent4": "#388e3c",
+        "agent5": "#c2185b",
+        "agent5.1": "#c2185b",
+        "agent5.2": "#c2185b",
+        "agent5.3": "#c2185b",
+        "retry": "#ffa000",
+        "agent6": "#0097a7",
+    }
+    border_color = border_colors.get(agent_id, "#757575")
 
-    # Add confidence bar for validators
+    # Build details text
+    details_parts = []
+
+    # Add confidence for validators
     confidence = details.get("confidence") or details.get("overall_confidence")
     if confidence is not None:
         conf_percent = float(confidence) * 100
-        conf_class = "confidence-high" if conf_percent >= 90 else "confidence-medium" if conf_percent >= 70 else "confidence-low"
-        details_html += f"""
-        <div class="trace-row">
-            <span class="trace-label">Confidence:</span>
-            <span class="trace-value">{conf_percent:.0f}%</span>
-        </div>
-        <div class="confidence-bar">
-            <div class="confidence-fill {conf_class}" style="width: {conf_percent}%"></div>
-        </div>
-        """
-
-    # Add SQL preview for generator
-    sql_preview = details.get("sql_preview", "")
-    if sql_preview:
-        # Escape HTML in SQL
-        sql_escaped = sql_preview.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        details_html += f'<div class="sql-preview">{sql_escaped}</div>'
+        conf_bar = "█" * int(conf_percent / 10) + "░" * (10 - int(conf_percent / 10))
+        details_parts.append(f"**Confidence:** {conf_percent:.0f}% `{conf_bar}`")
 
     # Add validation summary for main validator
     if agent_id == "agent5" and "syntax_confidence" in details:
         syntax_conf = details.get("syntax_confidence", 0) * 100
         schema_conf = details.get("schema_confidence", 0) * 100
         semantic_conf = details.get("semantic_confidence", 0) * 100
-        details_html += f"""
-        <div class="validation-summary">
-            <span class="validation-item">Syntax: {syntax_conf:.0f}%</span>
-            <span class="validation-item">Schema: {schema_conf:.0f}%</span>
-            <span class="validation-item">Semantic: {semantic_conf:.0f}%</span>
-        </div>
-        """
+        details_parts.append(f"Syntax: {syntax_conf:.0f}% | Schema: {schema_conf:.0f}% | Semantic: {semantic_conf:.0f}%")
 
     # Add complexity for orchestrator
     if "complexity" in details:
-        details_html += f"""
-        <div class="trace-row">
-            <span class="trace-label">Complexity:</span>
-            <span class="trace-value"><strong>{details['complexity']}</strong></span>
-        </div>
-        """
+        details_parts.append(f"**Complexity:** `{details['complexity']}`")
 
     # Add tables for schema extraction
     if "tables_extracted" in details:
         tables = details["tables_extracted"]
-        if isinstance(tables, list):
-            details_html += f"""
-            <div class="trace-row">
-                <span class="trace-label">Tables:</span>
-                <span class="trace-value">{', '.join(tables) if tables else 'None'}</span>
-            </div>
-            """
+        if isinstance(tables, list) and tables:
+            details_parts.append(f"**Tables:** {', '.join(tables)}")
 
     # Add rows returned for executor
     if "rows_returned" in details:
-        details_html += f"""
-        <div class="trace-row">
-            <span class="trace-label">Rows:</span>
-            <span class="trace-value">{details['rows_returned']}</span>
-        </div>
-        """
+        details_parts.append(f"**Rows:** {details['rows_returned']}")
 
     # Add retry info
     if details.get("retry_count", 0) > 0:
-        details_html += f"""
-        <div class="trace-row">
-            <span class="trace-label">Retry:</span>
-            <span class="trace-value">Attempt #{details['retry_count'] + 1}</span>
-        </div>
-        """
+        details_parts.append(f"⚠️ **Retry Attempt #{details['retry_count'] + 1}**")
 
-    html = f"""
-    <div class="agent-trace-card {agent_class}">
-        <div class="agent-trace-header">
-            <span class="agent-icon">{icon}</span>
-            <span class="agent-name">{clean_name}</span>
-            <span class="agent-status {status_class}">{status.upper()}</span>
-        </div>
-        <div class="agent-trace-content">
-            <div class="trace-row">
-                <span class="trace-label">Input:</span>
-                <span class="trace-value">{input_summary}</span>
-            </div>
-            <div class="trace-row">
-                <span class="trace-label">Output:</span>
-                <span class="trace-value">{output_summary}</span>
-            </div>
-            {details_html}
-        </div>
+    # Add SQL preview for generator
+    sql_preview = details.get("sql_preview", "")
+
+    # Build the card content
+    details_text = " | ".join(details_parts) if details_parts else ""
+
+    # Render using markdown with border styling
+    container.markdown(f"""
+<div style="border-left: 4px solid {border_color}; padding: 8px 12px; margin: 8px 0; background: #fafafa; border-radius: 0 4px 4px 0;">
+<strong>{icon} {clean_name}</strong> {status_emoji}
+<br><small style="color: #666;"><b>Input:</b> {input_summary}</small>
+<br><small style="color: #333;"><b>Output:</b> {output_summary}</small>
+{f'<br><small>{details_text}</small>' if details_text else ''}
+</div>
+    """, unsafe_allow_html=True)
+
+    # Show SQL preview separately if present
+    if sql_preview:
+        container.code(sql_preview, language="sql")
+
+
+def render_agent_trace_as_react(trace: dict, container):
+    """Render an agent trace in ReAct format (Thought/Action/Observation)."""
+    agent_id = trace.get("agent_id", "unknown")
+    agent_name = trace.get("agent_name", "Unknown Agent")
+    status = trace.get("status", "unknown")
+    input_summary = trace.get("input_summary", "")
+    output_summary = trace.get("output_summary", "")
+    details = trace.get("details", {})
+
+    icon = get_agent_icon(agent_id)
+
+    # Clean agent name
+    clean_name = ''.join(c for c in agent_name if ord(c) < 128 or c.isalnum() or c.isspace()).strip()
+    if not clean_name:
+        clean_name = agent_id.replace("_", " ").title()
+
+    # Thought: What the agent is about to do
+    container.markdown(f"""
+    <div class="thought-box">
+        <strong>💭 Thought:</strong><br>
+        Processing with <strong>{icon} {clean_name}</strong>: {input_summary}
     </div>
-    """
+    """, unsafe_allow_html=True)
 
-    container.markdown(html, unsafe_allow_html=True)
+    # Action: The agent execution
+    action_details = []
+    if details.get("complexity"):
+        action_details.append(f"Complexity: {details['complexity']}")
+    if details.get("tables_extracted"):
+        tables = details["tables_extracted"]
+        if isinstance(tables, list):
+            action_details.append(f"Tables: {', '.join(tables)}")
+    if details.get("sql_preview"):
+        action_details.append(f"SQL Generated")
+    if details.get("retry_count", 0) > 0:
+        action_details.append(f"Retry #{details['retry_count'] + 1}")
+
+    action_info = " | ".join(action_details) if action_details else "Executing..."
+
+    container.markdown(f"""
+    <div class="action-box">
+        <strong>🛠️ Action:</strong> {clean_name}<br>
+        <small>{action_info}</small>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Observation: The result
+    observation_parts = [output_summary]
+
+    # Add confidence if available
+    confidence = details.get("confidence") or details.get("overall_confidence")
+    if confidence is not None:
+        observation_parts.append(f"Confidence: {float(confidence)*100:.0f}%")
+
+    # Add validation details for agent5
+    if agent_id == "agent5" and "syntax_confidence" in details:
+        syntax = details.get("syntax_confidence", 0) * 100
+        schema = details.get("schema_confidence", 0) * 100
+        semantic = details.get("semantic_confidence", 0) * 100
+        observation_parts.append(f"Syntax: {syntax:.0f}% | Schema: {schema:.0f}% | Semantic: {semantic:.0f}%")
+
+    # Add rows for executor
+    if details.get("rows_returned") is not None:
+        observation_parts.append(f"Rows returned: {details['rows_returned']}")
+
+    # Add error if present
+    if details.get("error"):
+        observation_parts.append(f"Error: {details['error']}")
+
+    observation_text = "<br>".join(observation_parts)
+
+    container.markdown(f"""
+    <div class="observation-box">
+        <strong>👁️ Observation:</strong> [{status.upper()}]<br>
+        {observation_text}
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Show SQL code separately if present
+    sql_preview = details.get("sql_preview", "")
+    if sql_preview:
+        container.code(sql_preview, language="sql")
 
 
-def run_multi_agent_with_streaming(mission: str, trace_container, status_placeholder):
+def run_multi_agent_with_streaming(mission: str, trace_container, status_placeholder, react_container=None):
     """Run the multi-agent orchestrator with real-time trace updates."""
     from core.multi_agent_orchestrator import MultiAgentDataOrchestrator
     from core.config import FrameworkConfig, ModelConfig
@@ -1203,18 +1257,15 @@ def run_multi_agent_with_streaming(mission: str, trace_container, status_placeho
     # Initialize token counter
     token_counter = get_token_counter(st.session_state.model_name)
 
-    # Track displayed traces
+    # Track displayed traces and messages
     displayed_traces = set()
+    displayed_messages = set()
     final_state = None
     all_traces = []
+    all_messages = []
 
-    # Render header
-    trace_container.markdown("""
-    <div class="multi-agent-header">
-        <span>🤖</span>
-        <span>Multi-Agent Workflow Execution</span>
-    </div>
-    """, unsafe_allow_html=True)
+    # Render header for agent workflow
+    trace_container.markdown("### 🤖 Agent Workflow")
 
     # Create a container for agent cards
     agents_container = trace_container.container()
@@ -1238,7 +1289,17 @@ def run_multi_agent_with_streaming(mission: str, trace_container, status_placeho
                     if trace_id not in displayed_traces:
                         displayed_traces.add(trace_id)
                         all_traces.append(trace)
+                        # Render as card in workflow trace
                         render_agent_trace_card(trace, agents_container)
+                        # Also render as Thought/Action/Observation in ReAct trace
+                        if react_container:
+                            render_agent_trace_as_react(trace, react_container)
+
+                # Store messages for result
+                messages = node_state.get("messages", [])
+                for msg in messages:
+                    if msg not in all_messages:
+                        all_messages.append(msg)
 
                 final_state = node_state
 
@@ -1248,7 +1309,8 @@ def run_multi_agent_with_streaming(mission: str, trace_container, status_placeho
             "error": str(e),
             "is_complete": True,
             "final_answer": f"An error occurred: {str(e)}",
-            "agent_traces": all_traces
+            "agent_traces": all_traces,
+            "messages": all_messages
         }
 
     # Calculate token stats (approximate)
@@ -1256,13 +1318,15 @@ def run_multi_agent_with_streaming(mission: str, trace_container, status_placeho
     for trace in all_traces:
         # Rough estimate based on trace content
         execution_tokens += len(str(trace)) // 4
+    for msg in all_messages:
+        execution_tokens += token_counter.count_message(msg)
 
     st.session_state.total_tokens += execution_tokens
     st.session_state.last_total_tokens = execution_tokens
 
     # Build result
     result = {
-        "messages": final_state.get("messages", []) if final_state else [],
+        "messages": final_state.get("messages", []) if final_state else all_messages,
         "mission": mission,
         "agent_traces": all_traces,
         "is_complete": True,
@@ -1739,15 +1803,19 @@ def main():
                         status_placeholder = st.empty()
                         status_placeholder.markdown("**🔄 Multi-Agent Data Orchestrator initializing...**")
 
-                        # Create expander for real-time trace - starts expanded
+                        # Create expander for agent workflow trace
                         with st.expander("🤖 Multi-Agent Workflow Trace (Live)", expanded=True):
                             trace_container = st.container()
+
+                        # Create expander for standard ReAct trace (Thought/Action/Observation)
+                        with st.expander("🔍 ReAct Execution Trace (Live)", expanded=False):
+                            react_container = st.container()
 
                         # Placeholder for the final answer
                         answer_placeholder = st.empty()
 
-                        # Run with streaming
-                        result = run_multi_agent_with_streaming(prompt, trace_container, status_placeholder)
+                        # Run with streaming - pass both containers
+                        result = run_multi_agent_with_streaming(prompt, trace_container, status_placeholder, react_container)
 
                         # Get final answer
                         final_answer = result.get("final_answer") or result.get("general_answer") or "No result generated."

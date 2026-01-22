@@ -981,8 +981,15 @@ Respond ONLY with the JSON."""
         # Execute the query
         try:
             results = run_sql_query.invoke({"sql_query": generated_sql})
-            execution_success = True
-            error_msg = None
+
+            # Check if results contain an error message (run_sql_query returns errors as strings)
+            error_indicators = ["Error:", "SQL Syntax Error:", "Database Error:", "error executing"]
+            if any(indicator.lower() in results.lower() for indicator in error_indicators):
+                execution_success = False
+                error_msg = results
+            else:
+                execution_success = True
+                error_msg = None
         except Exception as e:
             results = f"Error executing query: {str(e)}"
             execution_success = False
