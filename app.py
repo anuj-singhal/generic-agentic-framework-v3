@@ -742,42 +742,42 @@ def render_sidebar():
         # ═══════════════════════════════════════════════════════════════
         st.markdown('<p class="sidebar-header">🔄 Query Cache</p>', unsafe_allow_html=True)
 
-        cache_size = len(query_cache)
-        cached_queries = query_cache.get_recent_queries()
+        cached_query = query_cache.get_cached_query()
+        has_cache = query_cache.has_cache()
 
         # Estimate tokens in cache (rough estimate: ~4 chars per token)
         cache_tokens = 0
-        for q in cached_queries:
-            cache_tokens += len(q.nl_query) // 4
-            cache_tokens += len(q.generated_sql) // 4
-            cache_tokens += len(q.query_results) // 4
+        if cached_query:
+            cache_tokens += len(cached_query.nl_query) // 4
+            cache_tokens += len(cached_query.generated_sql) // 4
+            cache_tokens += len(cached_query.query_results) // 4
 
-        # Display cache info using native Streamlit components
+        # Display cache status using native Streamlit components
         col1, col2 = st.columns(2)
         with col1:
-            st.caption(f"📊 {cache_size}/3 queries")
+            status = "✅ Active" if has_cache else "○ Empty"
+            st.caption(f"📊 {status}")
         with col2:
             st.caption(f"🎯 ~{cache_tokens:,} tokens")
 
-        if cached_queries:
-            for i, q in enumerate(reversed(cached_queries), 1):
-                query_preview = q.nl_query[:40] + "..." if len(q.nl_query) > 40 else q.nl_query
-                tables_str = ", ".join(q.tables_used[:3]) if q.tables_used else "N/A"
-                if len(q.tables_used) > 3:
-                    tables_str += f" +{len(q.tables_used) - 3}"
+        if cached_query:
+            query_preview = cached_query.nl_query[:40] + "..." if len(cached_query.nl_query) > 40 else cached_query.nl_query
+            tables_str = ", ".join(cached_query.tables_used[:3]) if cached_query.tables_used else "N/A"
+            if len(cached_query.tables_used) > 3:
+                tables_str += f" +{len(cached_query.tables_used) - 3}"
 
-                with st.container():
-                    st.markdown(f"""
-                    <div style="background: #fff3e0; border-left: 3px solid #ff9800; padding: 6px 10px; margin: 4px 0; border-radius: 4px;">
-                        <div style="font-size: 0.75rem; color: #333; font-weight: 500;">{i}. {query_preview}</div>
-                        <div style="font-size: 0.65rem; color: #666; margin-top: 2px;">Tables: {tables_str}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
+            with st.container():
+                st.markdown(f"""
+                <div style="background: #fff3e0; border-left: 3px solid #ff9800; padding: 6px 10px; margin: 4px 0; border-radius: 4px;">
+                    <div style="font-size: 0.75rem; color: #333; font-weight: 500;">📌 {query_preview}</div>
+                    <div style="font-size: 0.65rem; color: #666; margin-top: 2px;">Tables: {tables_str}</div>
+                </div>
+                """, unsafe_allow_html=True)
         else:
-            st.caption("_No cached queries yet_")
+            st.caption("_No cached query yet_")
 
         # Clear cache button
-        if cache_size > 0:
+        if has_cache:
             if st.button("🗑️ Clear Cache", use_container_width=True, key="clear_cache_btn"):
                 query_cache.clear()
                 st.rerun()
@@ -1450,13 +1450,32 @@ def run_multi_agent_with_streaming(mission: str, trace_container, status_placeho
 
     # Calculate token stats (approximate)
     execution_tokens = 0
+    input_tokens = 0
+    output_tokens = 0
+
     for trace in all_traces:
         # Rough estimate based on trace content
-        execution_tokens += len(str(trace)) // 4
-    for msg in all_messages:
-        execution_tokens += token_counter.count_message(msg)
+        trace_tokens = len(str(trace)) // 4
+        execution_tokens += trace_tokens
+        # Assume traces are mostly from LLM output
+        output_tokens += trace_tokens
 
+    for msg in all_messages:
+        msg_tokens = token_counter.count_message(msg)
+        execution_tokens += msg_tokens
+        # Classify by message type
+        if hasattr(msg, 'type'):
+            if msg.type == 'human':
+                input_tokens += msg_tokens
+            else:
+                output_tokens += msg_tokens
+        else:
+            output_tokens += msg_tokens
+
+    # Update session state token counters
     st.session_state.total_tokens += execution_tokens
+    st.session_state.last_input_tokens = input_tokens
+    st.session_state.last_output_tokens = output_tokens
     st.session_state.last_total_tokens = execution_tokens
 
     # Build result
@@ -1473,8 +1492,8 @@ def run_multi_agent_with_streaming(mission: str, trace_container, status_placeho
         "error": final_state.get("error") if final_state else None,
         "token_stats": {
             "total_tokens": execution_tokens,
-            "prompt_tokens": execution_tokens // 2,
-            "completion_tokens": execution_tokens // 2
+            "prompt_tokens": input_tokens,
+            "completion_tokens": output_tokens
         }
     }
 

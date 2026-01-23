@@ -47,62 +47,78 @@ class CachedQuery:
 
 class QueryCache:
     """
-    Cache for storing the last N queries for follow-up detection.
-    Uses a deque for efficient FIFO operations.
+    Cache for storing the LAST query result for follow-up detection.
+    Only stores 1 result - cleared only on NEW_QUERY intent.
     """
     _instance = None
-    _max_size: int = 3
 
     def __new__(cls):
         """Singleton pattern to ensure one cache instance."""
         if cls._instance is None:
             cls._instance = super().__new__(cls)
-            cls._instance._cache: Deque[CachedQuery] = deque(maxlen=cls._max_size)
+            cls._instance._cached_query: Optional[CachedQuery] = None
         return cls._instance
 
-    def add_query(self, nl_query: str, generated_sql: str, query_results: str, tables_used: List[str] = None):
-        """Add a new query to the cache."""
-        cached = CachedQuery(
+    def set_query(self, nl_query: str, generated_sql: str, query_results: str, tables_used: List[str] = None):
+        """Set the cached query (replaces any existing)."""
+        self._cached_query = CachedQuery(
             nl_query=nl_query,
             generated_sql=generated_sql,
             query_results=query_results,
             timestamp=datetime.now().isoformat(),
             tables_used=tables_used or []
         )
-        self._cache.append(cached)
 
-    def get_recent_queries(self) -> List[CachedQuery]:
-        """Get all cached queries, most recent last."""
-        return list(self._cache)
+    def get_cached_query(self) -> Optional[CachedQuery]:
+        """Get the cached query."""
+        return self._cached_query
 
-    def get_context_for_followup(self) -> str:
-        """Get formatted context string for follow-up detection."""
-        if not self._cache:
-            return "No previous queries in this session."
+    def has_cache(self) -> bool:
+        """Check if there's a cached query."""
+        return self._cached_query is not None
 
-        context_parts = []
-        for i, cached in enumerate(self._cache, 1):
-            # Truncate results if too long
-            results_preview = cached.query_results[:500] + "..." if len(cached.query_results) > 500 else cached.query_results
-            context_parts.append(f"""
---- Previous Query {i} ---
-Question: {cached.nl_query}
-SQL Generated: {cached.generated_sql}
-Results Preview: {results_preview}
-Tables Used: {', '.join(cached.tables_used) if cached.tables_used else 'Unknown'}
-""")
-        return "\n".join(context_parts)
+    def get_cache_context(self) -> str:
+        """Get formatted cache context for LLM."""
+        if not self._cached_query:
+            return ""
 
-    def get_last_query(self) -> Optional[CachedQuery]:
-        """Get the most recent cached query."""
-        return self._cache[-1] if self._cache else None
+        cached = self._cached_query
+        # Include full results for analysis (up to 3000 chars to ensure good analysis)
+        results = cached.query_results[:3000] + "..." if len(cached.query_results) > 3000 else cached.query_results
+
+        return f"""
+=== PREVIOUS QUERY AND RESULTS (from cache) ===
+PREVIOUS QUESTION: {cached.nl_query}
+
+PREVIOUS SQL:
+{cached.generated_sql}
+
+PREVIOUS RESULTS DATA:
+{results}
+
+TABLES USED: {', '.join(cached.tables_used) if cached.tables_used else 'Unknown'}
+=== END OF CACHED DATA ===
+"""
 
     def clear(self):
         """Clear the cache."""
-        self._cache.clear()
+        self._cached_query = None
+
+    # Backward compatibility methods
+    def add_query(self, nl_query: str, generated_sql: str, query_results: str, tables_used: List[str] = None):
+        """Alias for set_query for backward compatibility."""
+        self.set_query(nl_query, generated_sql, query_results, tables_used)
+
+    def get_last_query(self) -> Optional[CachedQuery]:
+        """Alias for get_cached_query for backward compatibility."""
+        return self.get_cached_query()
+
+    def get_recent_queries(self) -> List[CachedQuery]:
+        """Get cached query as list for backward compatibility."""
+        return [self._cached_query] if self._cached_query else []
 
     def __len__(self):
-        return len(self._cache)
+        return 1 if self._cached_query else 0
 
 
 # Global cache instance
@@ -417,121 +433,158 @@ class MultiAgentDataOrchestrator:
     def _agent1_prevalidation(self, state: MultiAgentState) -> Dict[str, Any]:
         """
         Agent1: Intent Classification Agent
-        Classifies user query into one of four intents:
-        1. NEW_DATA_QUERY: Fresh query requiring SQL generation
-        2. MODIFIED_QUERY: Modify/filter previous query (needs new SQL with context)
-        3. FOLLOWUP_QUESTION: Question about previous results (answer from cache)
-        4. GENERAL_QUESTION: Non-data question (answer directly)
+
+        Simplified Flow:
+        1. If NO cache → Check if GENERAL_QUESTION or NEW_DATA_QUERY
+        2. If cache EXISTS → Ask LLM with cached data:
+           a. Can answer from cache? → FOLLOWUP_QUESTION (answer directly)
+           b. Is it a modification? → MODIFIED_QUERY (generate SQL with context)
+           c. Otherwise → NEW_QUERY (clear cache, generate SQL)
+
+        Cache is cleared ONLY on NEW_QUERY intent.
         """
         nl_query = state["nl_query"]
         schema_summary = self._get_schema_summary()
+        cached_query = query_cache.get_cached_query()
+        has_cache = query_cache.has_cache()
 
-        # Get previous query context from cache
-        previous_context = query_cache.get_context_for_followup()
-        last_query = query_cache.get_last_query()
-        has_previous_queries = len(query_cache) > 0
+        # Build prompt based on whether we have cached data
+        if has_cache:
+            # We have cached data - let LLM decide if it can answer from cache
+            cache_context = query_cache.get_cache_context()
 
-        # Build the prompt with context
-        cache_section = ""
-        if has_previous_queries:
-            cache_section = f"""
-PREVIOUS QUERIES IN THIS SESSION (for context):
-{previous_context}
-"""
+            prompt = f"""You are an intelligent query classifier. A user has asked a question, and we have CACHED DATA from a previous query.
 
-        prompt = f"""You are an intent classification agent. Analyze the user's query and classify it into ONE of these intents:
+YOUR TASK: Analyze the user's question and determine the best way to handle it.
 
-1. **NEW_DATA_QUERY**: A fresh data query that needs SQL generation
-   - No reference to previous queries
-   - Asking for specific data from the database
-   - Examples: "Show me all clients", "List portfolios with value > 1M"
+{cache_context}
 
-2. **MODIFIED_QUERY**: User wants to modify/filter/extend the previous query (needs NEW SQL)
-   - References previous query but needs different/additional data
-   - Wants to filter, sort, group, or expand previous results
-   - Examples: "Show only the ones from UAE", "Add their email addresses", "Sort by value descending"
+CURRENT USER QUESTION: {nl_query}
 
-3. **FOLLOWUP_QUESTION**: User asks a question ABOUT the previous results (answer from CACHE, no new SQL)
-   - Asking for analysis, summary, or explanation of existing results
-   - Can be answered by looking at the cached query results
-   - Examples: "What's the total?", "Which one has the highest value?", "How many are there?", "Summarize this"
-
-4. **GENERAL_QUESTION**: Non-data question that doesn't need database access
-   - General knowledge questions
-   - Questions about SQL syntax or concepts
-   - Examples: "What is SQL?", "How do JOINs work?"
-
-AVAILABLE DATABASE SCHEMA:
+AVAILABLE DATABASE SCHEMA (for reference):
 {schema_summary}
-{cache_section}
-CURRENT USER QUERY: {nl_query}
+
+DECISION PROCESS:
+1. **CAN_ANSWER_FROM_CACHE**: Can you answer the user's question by analyzing the CACHED RESULTS above?
+   - If YES: Analyze the data and provide the SPECIFIC ANSWER (with actual numbers/values)
+   - Examples: "How many?", "What's the total?", "Which has the highest?", "Summarize this"
+
+2. **MODIFIED_QUERY**: Does the user want to MODIFY the previous query (filter, sort, add columns, etc.)?
+   - This requires generating NEW SQL based on the previous context
+   - Examples: "Show only from USA", "Add email column", "Sort by value", "Group by country"
+
+3. **NEW_QUERY**: Is this a completely NEW question unrelated to the previous query?
+   - This clears the cache and starts fresh
+   - Examples: "Show me all assets", "What transactions happened today?"
+
+4. **GENERAL_QUESTION**: Is this a general knowledge question (not about database data)?
+   - Examples: "What is SQL?", "How do JOINs work?"
 
 Respond in JSON format:
 {{
-    "intent": "NEW_DATA_QUERY" | "MODIFIED_QUERY" | "FOLLOWUP_QUESTION" | "GENERAL_QUESTION",
-    "reasoning": "Why you classified it this way",
+    "can_answer_from_cache": true/false,
+    "cache_answer": "If can_answer_from_cache=true, provide the COMPLETE ANSWER here with specific numbers. Otherwise null.",
+    "is_modified_query": true/false,
+    "is_new_query": true/false,
+    "is_general_question": true/false,
+    "reasoning": "Brief explanation of your decision",
     "related_tables": ["TABLE1", "TABLE2"],
-    "relationships": ["TABLE1.COL -> TABLE2.COL"],
-    "general_answer": "If GENERAL_QUESTION, provide the answer here. Otherwise null.",
-    "followup_answer": "If FOLLOWUP_QUESTION, analyze the cached results and provide answer here. Otherwise null.",
-    "modification_type": "filter/aggregate/sort/expand/new"
+    "general_answer": "If is_general_question=true, provide answer. Otherwise null."
 }}
 
-IMPORTANT GUIDELINES:
-- FOLLOWUP_QUESTION: The answer must come from analyzing the CACHED RESULTS shown above. Do NOT suggest running new SQL.
-- MODIFIED_QUERY: Requires generating NEW SQL that builds upon the previous query context.
-- For MODIFIED_QUERY, include ALL relevant tables (previous + new).
-- If no previous queries exist, cannot be MODIFIED_QUERY or FOLLOWUP_QUESTION.
+CRITICAL RULES:
+- For CACHE_ANSWER: Provide ACTUAL NUMBERS from the data (e.g., "Balanced has 4 clients" NOT "count the rows")
+- Only ONE of can_answer_from_cache, is_modified_query, is_new_query, is_general_question should be true
+- If the question references "the results", "those", "them", "this data" → likely CACHE or MODIFIED
+- If asking for totally different data → NEW_QUERY
 
-Respond ONLY with the JSON, no additional text."""
+Respond ONLY with JSON."""
+
+        else:
+            # No cache - simpler decision between NEW_DATA_QUERY and GENERAL_QUESTION
+            prompt = f"""You are a query classifier. Determine if this is a DATABASE query or a GENERAL question.
+
+USER QUESTION: {nl_query}
+
+AVAILABLE DATABASE SCHEMA:
+{schema_summary}
+
+Respond in JSON format:
+{{
+    "is_data_query": true/false,
+    "is_general_question": true/false,
+    "reasoning": "Brief explanation",
+    "related_tables": ["TABLE1", "TABLE2"],
+    "general_answer": "If is_general_question=true, provide the answer. Otherwise null."
+}}
+
+Respond ONLY with JSON."""
 
         response = self.llm.invoke([HumanMessage(content=prompt)])
 
+        # Parse response and determine intent
         try:
             result = json.loads(response.content.strip())
-            intent = result.get("intent", "NEW_DATA_QUERY")
-            reasoning = result.get("reasoning", "")
-            related_tables = result.get("related_tables", [])
-            relationships = result.get("relationships", [])
-            general_answer = result.get("general_answer")
-            followup_answer = result.get("followup_answer")
-            modification_type = result.get("modification_type", "new")
-
         except json.JSONDecodeError:
-            intent = "NEW_DATA_QUERY"
-            reasoning = "Failed to parse response, defaulting to new data query"
-            related_tables = []
-            relationships = []
-            general_answer = None
-            followup_answer = None
-            modification_type = "new"
+            result = {}
 
-        # Determine intent flags
-        is_data_query = intent in ["NEW_DATA_QUERY", "MODIFIED_QUERY"]
-        is_modified_query = intent == "MODIFIED_QUERY"
-        is_followup_question = intent == "FOLLOWUP_QUESTION"
+        # Determine intent based on response
+        intent = "NEW_DATA_QUERY"
+        is_data_query = True
+        is_modified_query = False
+        is_followup_question = False
+        general_answer = None
+        followup_answer = None
+        related_tables = result.get("related_tables", [])
+        reasoning = result.get("reasoning", "")
+
+        if has_cache:
+            # Parse cache-aware response
+            if result.get("can_answer_from_cache"):
+                intent = "FOLLOWUP_QUESTION"
+                is_data_query = False
+                is_followup_question = True
+                followup_answer = result.get("cache_answer")
+            elif result.get("is_modified_query"):
+                intent = "MODIFIED_QUERY"
+                is_modified_query = True
+            elif result.get("is_general_question"):
+                intent = "GENERAL_QUESTION"
+                is_data_query = False
+                general_answer = result.get("general_answer")
+            else:
+                # NEW_QUERY - clear the cache
+                intent = "NEW_DATA_QUERY"
+                query_cache.clear()
+        else:
+            # No cache - simple classification
+            if result.get("is_general_question"):
+                intent = "GENERAL_QUESTION"
+                is_data_query = False
+                general_answer = result.get("general_answer")
+            else:
+                intent = "NEW_DATA_QUERY"
 
         # Build context for modified queries
         followup_context = None
         previous_sql = None
         previous_results = None
 
-        if (is_modified_query or is_followup_question) and last_query:
+        if is_modified_query and cached_query:
             followup_context = {
-                "previous_nl_query": last_query.nl_query,
-                "previous_sql": last_query.generated_sql,
-                "previous_results": last_query.query_results,
-                "tables_used": last_query.tables_used,
-                "modification_type": modification_type
+                "previous_nl_query": cached_query.nl_query,
+                "previous_sql": cached_query.generated_sql,
+                "previous_results": cached_query.query_results,
+                "tables_used": cached_query.tables_used,
             }
-            previous_sql = last_query.generated_sql
-            previous_results = last_query.query_results
+            previous_sql = cached_query.generated_sql
+            previous_results = cached_query.query_results
 
-        # Create output summary based on intent
+        # Create output summary
         if intent == "NEW_DATA_QUERY":
-            output_summary = f"New data query. Related tables: {', '.join(related_tables) if related_tables else 'analyzing...'}"
+            output_summary = f"New query{' (cache cleared)' if has_cache and not is_modified_query else ''}. Tables: {', '.join(related_tables) if related_tables else 'analyzing...'}"
         elif intent == "MODIFIED_QUERY":
-            output_summary = f"Modified query ({modification_type}). Related tables: {', '.join(related_tables) if related_tables else 'analyzing...'}"
+            output_summary = f"Modified query (builds on previous). Tables: {', '.join(related_tables) if related_tables else 'analyzing...'}"
         elif intent == "FOLLOWUP_QUESTION":
             output_summary = "Follow-up question - answering from cached results"
         else:
@@ -544,13 +597,12 @@ Respond ONLY with the JSON, no additional text."""
             output_summary=output_summary,
             details={
                 "intent": intent,
+                "has_cache": has_cache,
                 "is_data_query": is_data_query,
                 "is_modified_query": is_modified_query,
                 "is_followup_question": is_followup_question,
-                "modification_type": modification_type if is_modified_query else None,
                 "related_tables": related_tables,
-                "reasoning": reasoning,
-                "cached_queries_count": len(query_cache)
+                "reasoning": reasoning
             }
         )
 
@@ -572,7 +624,7 @@ Respond ONLY with the JSON, no additional text."""
             "followup_answer": followup_answer,
             "general_answer": final_general_answer,
             "related_tables": related_tables,
-            "relationships": relationships,
+            "relationships": [],  # Relationships determined by Agent2
             "current_agent": "agent1_prevalidation",
             "agent_traces": self._add_trace(state, trace)
         }
@@ -1014,6 +1066,7 @@ Respond ONLY with the JSON, no additional text."""
     # =========================================================================
     # AGENT 5: Validation Agent
     # =========================================================================
+
     def _agent5_validator(self, state: MultiAgentState) -> Dict[str, Any]:
         """
         Agent5: Multi-level Validation Agent
@@ -1159,25 +1212,40 @@ Respond ONLY with the JSON."""
 
     def _validate_schema(self, sql: str, schema_str: str) -> Dict[str, Any]:
         """Agent 5.2: Schema Validation"""
-        prompt = f"""You are a database schema validation expert. Validate that the SQL query correctly uses the schema.
+        prompt = f"""You are a STRICT database schema validation expert. Your job is to verify that EVERY column and table referenced in the SQL query EXISTS in the schema.
 
 SQL QUERY:
 {sql}
 
-AVAILABLE SCHEMA:
+AVAILABLE SCHEMA (ONLY these tables and columns exist):
 {schema_str}
 
+STRICT VALIDATION RULES:
+1. Extract ALL table names from the SQL (after FROM, JOIN, etc.)
+2. Extract ALL column names from the SQL (in SELECT, WHERE, ON, GROUP BY, ORDER BY, etc.)
+3. For EACH column, verify it EXISTS in the corresponding table in the schema above
+4. If a column is NOT listed in the schema, mark is_valid as FALSE
+5. If a table is NOT listed in the schema, mark is_valid as FALSE
+6. Do NOT assume columns exist - they MUST be explicitly listed in the schema
+
+COMMON MISTAKES TO CATCH:
+- Columns that "sound reasonable" but don't exist (e.g., "PORTFOLIO_VALUE" when only "PORTFOLIO_NAME" exists)
+- Using aggregate/calculated column names that don't exist in base tables
+- Referencing columns with wrong table aliases
+
 Check for:
-1. All table names exist in the schema
-2. All column names exist in their respective tables
-3. JOINs use correct foreign key relationships
-4. Data types are used correctly (e.g., comparing strings to strings)
-5. Primary keys are used correctly
+1. Every table name exists in the schema
+2. Every column name exists in its respective table (CHECK THE SCHEMA CAREFULLY)
+3. JOINs use columns that actually exist
+4. No imaginary or assumed columns
 
 Respond in JSON format:
 {{
     "is_valid": true/false,
     "confidence": 0.0 to 1.0,
+    "tables_found": ["list of tables used"],
+    "columns_verified": ["list of columns that exist"],
+    "columns_missing": ["list of columns that DO NOT exist in schema"],
     "issues": ["List of schema issues found"],
     "suggestions": ["How to fix each issue"]
 }}
