@@ -1492,6 +1492,471 @@ FOLLOWUP_MEDIUM_EXAMPLES = MODIFIED_QUERY_MEDIUM_EXAMPLES + FOLLOWUP_QUESTION_ME
 FOLLOWUP_COMPLEX_EXAMPLES = MODIFIED_QUERY_COMPLEX_EXAMPLES + FOLLOWUP_QUESTION_COMPLEX_EXAMPLES
 
 
+# =============================================================================
+# SYNTHETIC DATA GENERATION EXAMPLES
+# =============================================================================
+
+SYNTH_SIMPLE_EXAMPLES = [
+    {
+        "name": "Check Table Exists",
+        "agent": "synthetic_data_agent",
+        "query": "Check if the CLIENTS table exists in the database",
+        "expected_tools": ["check_table_exists"],
+        "description": "Verify source table exists before generation"
+    },
+    {
+        "name": "Get Table Schema",
+        "agent": "synthetic_data_agent",
+        "query": "Show me the schema of the CLIENTS table for synthetic data generation",
+        "expected_tools": ["get_table_schema_for_synth"],
+        "description": "Get schema with SDV type mappings"
+    },
+    {
+        "name": "Get Table Relationships",
+        "agent": "synthetic_data_agent",
+        "query": "What are the relationships for the PORTFOLIOS table?",
+        "expected_tools": ["get_table_relationships"],
+        "description": "View parent/child table dependencies"
+    },
+    {
+        "name": "Get Sample Data",
+        "agent": "synthetic_data_agent",
+        "query": "Show me sample data from the ASSETS table for training",
+        "expected_tools": ["get_sample_data_for_synth"],
+        "description": "Get training data for SDV"
+    },
+    {
+        "name": "List Synth Tables",
+        "agent": "synthetic_data_agent",
+        "query": "List all existing SYNTH_* tables in the database",
+        "expected_tools": ["list_synth_tables"],
+        "description": "View all generated synthetic tables"
+    },
+    {
+        "name": "Analyze Dependencies",
+        "agent": "synthetic_data_agent",
+        "query": "What is the generation order for the TRANSACTIONS table?",
+        "expected_tools": ["analyze_table_dependencies"],
+        "description": "Get dependency chain and generation order"
+    },
+]
+
+SYNTH_MEDIUM_EXAMPLES = [
+    {
+        "name": "Generate Simple Synthetic Clients",
+        "agent": "synthetic_data_agent",
+        "query": "Generate 5 synthetic clients for testing purposes",
+        "expected_tools": ["check_table_exists", "get_table_schema_for_synth", "get_table_relationships", "create_synth_table", "generate_synthetic_data", "insert_synthetic_data"],
+        "description": "Full workflow for generating synthetic clients (no dependencies)"
+    },
+    {
+        "name": "Generate Synthetic Assets",
+        "agent": "synthetic_data_agent",
+        "query": "Create 10 synthetic asset records in the database",
+        "expected_tools": ["check_table_exists", "get_table_schema_for_synth", "get_table_relationships", "create_synth_table", "generate_synthetic_data", "insert_synthetic_data"],
+        "description": "Generate synthetic assets (independent table)"
+    },
+    {
+        "name": "Check and Generate",
+        "agent": "synthetic_data_agent",
+        "query": """I want to generate synthetic data for CLIENTS:
+1. First check if the table exists
+2. Show me the schema
+3. Check any relationships
+4. Then generate 3 synthetic records""",
+        "expected_tools": ["check_table_exists", "get_table_schema_for_synth", "get_table_relationships", "create_synth_table", "generate_synthetic_data", "insert_synthetic_data"],
+        "description": "Step-by-step synthetic data generation"
+    },
+    {
+        "name": "View Generation Summary",
+        "agent": "synthetic_data_agent",
+        "query": """Generate 5 synthetic clients and then show me a summary of what was generated""",
+        "expected_tools": ["check_table_exists", "create_synth_table", "generate_synthetic_data", "insert_synthetic_data", "get_generation_summary"],
+        "description": "Generate and summarize results"
+    },
+    {
+        "name": "Analyze Before Generate",
+        "agent": "synthetic_data_agent",
+        "query": """Before generating data for PORTFOLIOS, analyze the dependencies.
+What tables need to exist first?""",
+        "expected_tools": ["analyze_table_dependencies", "get_table_relationships"],
+        "description": "Dependency analysis before generation"
+    },
+]
+
+SYNTH_COMPLEX_EXAMPLES = [
+    {
+        "name": "Generate Portfolios with Dependencies",
+        "agent": "synthetic_data_agent",
+        "query": """Generate 5 synthetic portfolios.
+Note: PORTFOLIOS depends on CLIENTS, so make sure SYNTH_CLIENTS exists first.
+If not, generate synthetic clients first, then generate portfolios.""",
+        "expected_tools": ["analyze_table_dependencies", "list_synth_tables", "check_table_exists", "create_synth_table", "generate_synthetic_data", "insert_synthetic_data"],
+        "description": "Handle table dependencies during generation"
+    },
+    {
+        "name": "Full Dependency Chain",
+        "agent": "synthetic_data_agent",
+        "query": """I need to generate synthetic TRANSACTIONS data.
+Analyze the full dependency chain and tell me what tables need to be generated first.
+Then generate the entire chain: CLIENTS -> PORTFOLIOS -> TRANSACTIONS with 5 records each.""",
+        "expected_tools": ["analyze_table_dependencies", "list_synth_tables", "check_table_exists", "create_synth_table", "generate_synthetic_data", "insert_synthetic_data", "get_generation_summary"],
+        "description": "Multi-table generation with dependency chain"
+    },
+    {
+        "name": "Complete Test Data Set",
+        "agent": "synthetic_data_agent",
+        "query": """Create a complete synthetic test dataset:
+1. First analyze dependencies for all tables
+2. Generate 10 synthetic CLIENTS
+3. Generate 15 synthetic ASSETS
+4. Generate 20 synthetic PORTFOLIOS
+5. List all SYNTH_* tables to confirm""",
+        "expected_tools": ["analyze_table_dependencies", "check_table_exists", "create_synth_table", "generate_synthetic_data", "insert_synthetic_data", "list_synth_tables"],
+        "description": "Generate multiple related synthetic tables"
+    },
+    {
+        "name": "Validate and Generate Holdings",
+        "agent": "synthetic_data_agent",
+        "query": """Generate synthetic HOLDINGS data:
+1. Check what the HOLDINGS table looks like (schema)
+2. Analyze its dependencies (needs PORTFOLIOS and ASSETS)
+3. Check if SYNTH_PORTFOLIOS and SYNTH_ASSETS exist
+4. If they exist, generate 25 synthetic holdings
+5. Show generation summary""",
+        "expected_tools": ["get_table_schema_for_synth", "analyze_table_dependencies", "list_synth_tables", "check_table_exists", "create_synth_table", "generate_synthetic_data", "insert_synthetic_data", "get_generation_summary"],
+        "description": "Complex generation with validation"
+    },
+    {
+        "name": "Incremental Generation",
+        "agent": "synthetic_data_agent",
+        "query": """I already have some SYNTH_CLIENTS. Generate 5 more synthetic clients
+and add them to the existing SYNTH_CLIENTS table. Show the total count after.""",
+        "expected_tools": ["list_synth_tables", "generate_synthetic_data", "insert_synthetic_data", "get_generation_summary"],
+        "description": "Add more records to existing synthetic table"
+    },
+    {
+        "name": "Full Pipeline Verification",
+        "agent": "synthetic_data_agent",
+        "query": """Execute a full synthetic data generation pipeline:
+1. List any existing SYNTH_* tables
+2. Analyze the dependency order for TRANSACTIONS table
+3. For each table in the dependency chain:
+   a. Check if source table exists
+   b. Get its schema
+   c. Create SYNTH_* table if needed
+   d. Generate 3 synthetic records
+   e. Insert into database
+4. Show final summary of all SYNTH_* tables""",
+        "expected_tools": ["list_synth_tables", "analyze_table_dependencies", "check_table_exists", "get_table_schema_for_synth", "create_synth_table", "generate_synthetic_data", "insert_synthetic_data", "get_generation_summary"],
+        "description": "Complete pipeline with verification at each step"
+    },
+]
+
+
+# =============================================================================
+# SYNTHETIC DATA - SCHEMA FILE EXAMPLES (Creating new tables)
+# =============================================================================
+
+SYNTH_SCHEMA_SIMPLE_EXAMPLES = [
+    {
+        "name": "List Available Schemas",
+        "agent": "synthetic_data_agent",
+        "query": "What schema files are available for creating new tables?",
+        "expected_tools": ["list_available_schemas"],
+        "description": "List all JSON schema files in the synthetic_data directory"
+    },
+    {
+        "name": "Load Financial Schema",
+        "agent": "synthetic_data_agent",
+        "query": "Load the financial_transactions.json schema file and show me what tables it contains",
+        "expected_tools": ["load_schema_from_file"],
+        "description": "Load a schema file and view available tables"
+    },
+    {
+        "name": "View Table Definition",
+        "agent": "synthetic_data_agent",
+        "query": "Show me the detailed definition of the ACCOUNTS table from financial_transactions.json",
+        "expected_tools": ["load_schema_from_file", "get_schema_table_definition"],
+        "description": "View specific table definition from schema file"
+    },
+    {
+        "name": "Check Non-Existent Table",
+        "agent": "synthetic_data_agent",
+        "query": "Does the ACCOUNTS table exist in the database?",
+        "expected_tools": ["check_table_exists"],
+        "description": "Check for a table that doesn't exist"
+    },
+]
+
+SYNTH_SCHEMA_MEDIUM_EXAMPLES = [
+    {
+        "name": "Create Single Table from Schema",
+        "agent": "synthetic_data_agent",
+        "query": """Create the MERCHANTS table from the financial_transactions.json schema file.
+This table has no dependencies so it can be created independently.""",
+        "expected_tools": ["check_table_exists", "list_available_schemas", "load_schema_from_file", "create_table_from_schema"],
+        "description": "Create a single table from schema definition"
+    },
+    {
+        "name": "Create Table with Dependencies",
+        "agent": "synthetic_data_agent",
+        "query": """Create the CARDS table from financial_transactions.json.
+Note: CARDS depends on ACCOUNTS, so both should be created.""",
+        "expected_tools": ["check_table_exists", "load_schema_from_file", "create_tables_with_dependencies"],
+        "description": "Create table and its dependencies from schema"
+    },
+    {
+        "name": "Generate Data for New Table",
+        "agent": "synthetic_data_agent",
+        "query": """I want to generate synthetic ACCOUNTS data, but the table doesn't exist yet.
+1. Check if ACCOUNTS exists
+2. If not, find the schema file and create the table
+3. Then generate 10 synthetic accounts""",
+        "expected_tools": ["check_table_exists", "list_available_schemas", "load_schema_from_file", "create_table_from_schema", "generate_synthetic_data", "insert_synthetic_data"],
+        "description": "Full workflow for non-existent table"
+    },
+    {
+        "name": "Drop and Recreate Table",
+        "agent": "synthetic_data_agent",
+        "query": """Drop the MERCHANTS table if it exists, then recreate it from the financial_transactions.json schema""",
+        "expected_tools": ["check_table_exists", "drop_table", "load_schema_from_file", "create_table_from_schema"],
+        "description": "Drop existing table and recreate from schema"
+    },
+]
+
+SYNTH_SCHEMA_COMPLEX_EXAMPLES = [
+    {
+        "name": "Full Financial Tables Setup",
+        "agent": "synthetic_data_agent",
+        "query": """Set up the complete financial transactions database:
+1. List available schemas
+2. Load the financial_transactions.json schema
+3. Create all tables in the correct dependency order
+4. Show the tables that were created""",
+        "expected_tools": ["list_available_schemas", "load_schema_from_file", "create_tables_with_dependencies", "check_table_exists"],
+        "description": "Create all tables from a schema file"
+    },
+    {
+        "name": "Generate Card Transactions Pipeline",
+        "agent": "synthetic_data_agent",
+        "query": """Generate synthetic card transaction data:
+1. The CARD_TRANSACTIONS table doesn't exist - create it from financial_transactions.json
+2. This should also create: ACCOUNTS, CARDS, MERCHANTS (dependencies)
+3. Generate data for each table in order:
+   - 10 ACCOUNTS
+   - 5 MERCHANTS
+   - 15 CARDS
+   - 50 CARD_TRANSACTIONS
+4. Show summary of all created tables""",
+        "expected_tools": ["check_table_exists", "load_schema_from_file", "create_tables_with_dependencies", "generate_synthetic_data", "insert_synthetic_data", "list_synth_tables"],
+        "description": "Full pipeline: create tables and generate data"
+    },
+    {
+        "name": "Clean and Rebuild",
+        "agent": "synthetic_data_agent",
+        "query": """Clean up and rebuild the synthetic data environment:
+1. List all existing SYNTH_* tables
+2. Drop all SYNTH_* tables
+3. List available schema files
+4. Create ACCOUNTS and CARDS tables from financial_transactions.json
+5. Generate 5 synthetic accounts and 10 synthetic cards
+6. Show final state""",
+        "expected_tools": ["list_synth_tables", "drop_all_synth_tables", "list_available_schemas", "load_schema_from_file", "create_tables_with_dependencies", "generate_synthetic_data", "insert_synthetic_data"],
+        "description": "Clean environment and rebuild with new schema"
+    },
+    {
+        "name": "Mixed Schema Generation",
+        "agent": "synthetic_data_agent",
+        "query": """I need test data from both wealth management and financial transactions:
+1. Generate 5 synthetic CLIENTS (existing table)
+2. Create ACCOUNTS from financial_transactions.json and generate 5 records
+3. Create MERCHANTS and generate 10 records
+4. List all synthetic data in the database""",
+        "expected_tools": ["check_table_exists", "create_synth_table", "generate_synthetic_data", "load_schema_from_file", "create_table_from_schema", "insert_synthetic_data", "list_synth_tables"],
+        "description": "Generate data from multiple schema sources"
+    },
+    {
+        "name": "Complete Banking Test Suite",
+        "agent": "synthetic_data_agent",
+        "query": """Create a complete test suite for a banking application:
+1. Check what financial tables exist vs what's available in schema files
+2. Create all missing tables from financial_transactions.json
+3. Generate realistic test data:
+   - 20 ACCOUNTS with different types and statuses
+   - 10 MERCHANTS across different categories
+   - 30 CARDS linked to accounts
+   - 100 BANK_TRANSACTIONS
+   - 200 CARD_TRANSACTIONS
+   - 50 ACCOUNT_BALANCES
+4. Provide a summary of the generated test data""",
+        "expected_tools": ["list_available_schemas", "check_table_exists", "load_schema_from_file", "create_tables_with_dependencies", "generate_synthetic_data", "insert_synthetic_data", "get_generation_summary"],
+        "description": "Complete test data generation for banking domain"
+    },
+]
+
+
+# =============================================================================
+# SYNTHETIC DATA - SEED DATA EXAMPLES (Empty Table Handling)
+# =============================================================================
+
+SYNTH_SEED_SIMPLE_EXAMPLES = [
+    {
+        "name": "Check Table Data Status",
+        "agent": "synthetic_data_agent",
+        "query": "Check the data status of the CLIENTS table - does it have data?",
+        "expected_tools": ["get_table_data_status"],
+        "description": "Get detailed status including row count and workflow guidance"
+    },
+    {
+        "name": "Check Empty Table",
+        "agent": "synthetic_data_agent",
+        "query": "Check if the MERCHANTS table exists and whether it has any data",
+        "expected_tools": ["check_table_exists"],
+        "description": "Verify table exists and check if empty (returns OK/EMPTY/NOT_FOUND)"
+    },
+    {
+        "name": "Generate Seed Data Prompt",
+        "agent": "synthetic_data_agent",
+        "query": "Generate a seed data prompt for the CLIENTS table to create 5 sample records",
+        "expected_tools": ["get_table_schema_for_synth", "generate_seed_data_prompt"],
+        "description": "Create LLM prompt for generating seed data"
+    },
+    {
+        "name": "View Table Status Details",
+        "agent": "synthetic_data_agent",
+        "query": "What is the current status of the PORTFOLIOS table? Show me the workflow I should follow.",
+        "expected_tools": ["get_table_data_status"],
+        "description": "Get workflow guidance based on table status"
+    },
+]
+
+SYNTH_SEED_MEDIUM_EXAMPLES = [
+    {
+        "name": "Empty Table Seed Generation",
+        "agent": "synthetic_data_agent",
+        "query": """The MERCHANTS table is empty. I need to:
+1. Check its current status
+2. Get its schema
+3. Generate a seed data prompt for 5 records
+4. Use the prompt to understand what data to generate""",
+        "expected_tools": ["check_table_exists", "get_table_schema_for_synth", "generate_seed_data_prompt"],
+        "description": "Prepare seed data generation for empty table"
+    },
+    {
+        "name": "Insert Seed Data",
+        "agent": "synthetic_data_agent",
+        "query": """Insert this seed data into the MERCHANTS table:
+[
+    {"MERCHANT_ID": 1, "MERCHANT_NAME": "Amazon", "CATEGORY": "Retail", "COUNTRY": "USA", "MCC_CODE": "5411"},
+    {"MERCHANT_ID": 2, "MERCHANT_NAME": "Uber", "CATEGORY": "Transportation", "COUNTRY": "USA", "MCC_CODE": "4121"},
+    {"MERCHANT_ID": 3, "MERCHANT_NAME": "Carrefour", "CATEGORY": "Retail", "COUNTRY": "UAE", "MCC_CODE": "5411"}
+]""",
+        "expected_tools": ["insert_seed_data"],
+        "description": "Insert LLM-generated seed data into table"
+    },
+    {
+        "name": "Seed Then Synthesize",
+        "agent": "synthetic_data_agent",
+        "query": """For the ACCOUNTS table:
+1. Check if it exists and has data
+2. If empty, generate a seed data prompt
+3. After seeding (assume done), generate 10 synthetic records""",
+        "expected_tools": ["check_table_exists", "get_table_data_status", "generate_seed_data_prompt", "generate_synthetic_data", "insert_synthetic_data"],
+        "description": "Full workflow: check -> seed -> synthesize"
+    },
+    {
+        "name": "Multi-Table Status Check",
+        "agent": "synthetic_data_agent",
+        "query": """Check the data status of these tables and tell me what needs seeding:
+1. CLIENTS
+2. ASSETS
+3. MERCHANTS
+4. ACCOUNTS""",
+        "expected_tools": ["get_table_data_status", "check_table_exists"],
+        "description": "Identify which tables need seed data"
+    },
+]
+
+SYNTH_SEED_COMPLEX_EXAMPLES = [
+    {
+        "name": "Complete Empty Table Workflow",
+        "agent": "synthetic_data_agent",
+        "query": """I have an empty CARDS table. Execute the complete workflow:
+1. Check the table exists and is empty
+2. Get the table schema
+3. Generate a seed data prompt for 5 records
+4. Based on the schema, generate appropriate JSON seed data
+5. Insert the seed data
+6. Then generate 20 additional synthetic records
+7. Show the generation summary""",
+        "expected_tools": ["check_table_exists", "get_table_schema_for_synth", "generate_seed_data_prompt", "insert_seed_data", "generate_synthetic_data", "insert_synthetic_data", "get_generation_summary"],
+        "description": "Full workflow for empty table: seed -> synthesize"
+    },
+    {
+        "name": "Seed Dependencies Chain",
+        "agent": "synthetic_data_agent",
+        "query": """I need to generate CARD_TRANSACTIONS but all parent tables are empty.
+1. Check status of ACCOUNTS, CARDS, MERCHANTS (dependencies)
+2. For each empty table, generate seed data prompts
+3. After seeding parents, generate synthetic CARD_TRANSACTIONS
+The workflow should handle the dependency order correctly.""",
+        "expected_tools": ["get_table_data_status", "analyze_table_dependencies", "generate_seed_data_prompt", "insert_seed_data", "generate_synthetic_data", "insert_synthetic_data"],
+        "description": "Handle empty tables in dependency chain"
+    },
+    {
+        "name": "Intelligent Table Preparation",
+        "agent": "synthetic_data_agent",
+        "query": """Prepare the financial transactions database for testing:
+1. List all financial tables from schema
+2. For each table, check its status:
+   - If NOT_FOUND: create from schema
+   - If EMPTY: generate seed data (5 records)
+   - If OK: skip (has data)
+3. After all tables are seeded, generate synthetic data:
+   - 20 extra ACCOUNTS
+   - 50 CARD_TRANSACTIONS
+4. Show final summary""",
+        "expected_tools": ["list_available_schemas", "load_schema_from_file", "get_table_data_status", "create_table_from_schema", "generate_seed_data_prompt", "insert_seed_data", "generate_synthetic_data", "insert_synthetic_data", "get_generation_summary"],
+        "description": "Intelligent table preparation with status-based actions"
+    },
+    {
+        "name": "Seed Data Quality Check",
+        "agent": "synthetic_data_agent",
+        "query": """For the BANK_TRANSACTIONS table:
+1. Check if it exists and has data
+2. If empty, analyze its schema and relationships
+3. Generate a detailed seed data prompt that includes:
+   - Column constraints
+   - Foreign key references
+   - Sample values
+4. Use the prompt to generate 10 realistic seed records
+5. Validate and insert the seed data
+6. Generate 100 synthetic records based on the seed
+7. Provide a summary including data quality metrics""",
+        "expected_tools": ["check_table_exists", "get_table_schema_for_synth", "get_table_relationships", "generate_seed_data_prompt", "insert_seed_data", "generate_synthetic_data", "insert_synthetic_data", "get_generation_summary"],
+        "description": "High-quality seed data generation with validation"
+    },
+    {
+        "name": "Full Database Bootstrap",
+        "agent": "synthetic_data_agent",
+        "query": """Bootstrap a complete test database from scratch:
+1. Drop all existing SYNTH_* tables
+2. Load the financial_transactions.json schema
+3. Create all tables in dependency order
+4. For each table in order:
+   a. Check status (should be EMPTY after creation)
+   b. Generate seed data prompt
+   c. Insert 5-10 seed records
+   d. Generate 50+ synthetic records
+5. Verify all tables have data
+6. Show comprehensive summary with row counts""",
+        "expected_tools": ["drop_all_synth_tables", "list_available_schemas", "load_schema_from_file", "create_tables_with_dependencies", "get_table_data_status", "generate_seed_data_prompt", "insert_seed_data", "generate_synthetic_data", "insert_synthetic_data", "list_synth_tables", "get_generation_summary"],
+        "description": "Complete database bootstrap with seeding"
+    },
+]
+
+
 def print_examples():
     """Print all examples in a formatted way."""
 
@@ -1520,6 +1985,15 @@ def print_examples():
         ("❓ FOLLOWUP QUESTION MEDIUM", FOLLOWUP_QUESTION_MEDIUM_EXAMPLES),
         ("❓ FOLLOWUP QUESTION COMPLEX", FOLLOWUP_QUESTION_COMPLEX_EXAMPLES),
         ("🆕 NEW QUERY EXAMPLES", NEW_QUERY_EXAMPLES),
+        ("🧪 SYNTHETIC DATA SIMPLE", SYNTH_SIMPLE_EXAMPLES),
+        ("🧪 SYNTHETIC DATA MEDIUM", SYNTH_MEDIUM_EXAMPLES),
+        ("🧪 SYNTHETIC DATA COMPLEX", SYNTH_COMPLEX_EXAMPLES),
+        ("📁 SYNTH SCHEMA SIMPLE", SYNTH_SCHEMA_SIMPLE_EXAMPLES),
+        ("📁 SYNTH SCHEMA MEDIUM", SYNTH_SCHEMA_MEDIUM_EXAMPLES),
+        ("📁 SYNTH SCHEMA COMPLEX", SYNTH_SCHEMA_COMPLEX_EXAMPLES),
+        ("🌱 SYNTH SEED SIMPLE", SYNTH_SEED_SIMPLE_EXAMPLES),
+        ("🌱 SYNTH SEED MEDIUM", SYNTH_SEED_MEDIUM_EXAMPLES),
+        ("🌱 SYNTH SEED COMPLEX", SYNTH_SEED_COMPLEX_EXAMPLES),
     ]
     
     for category_name, examples in all_categories:
@@ -1558,7 +2032,16 @@ def get_example_by_name(name: str) -> dict:
         FOLLOWUP_SIMPLE_EXAMPLES +
         FOLLOWUP_MEDIUM_EXAMPLES +
         FOLLOWUP_COMPLEX_EXAMPLES +
-        NEW_QUERY_EXAMPLES
+        NEW_QUERY_EXAMPLES +
+        SYNTH_SIMPLE_EXAMPLES +
+        SYNTH_MEDIUM_EXAMPLES +
+        SYNTH_COMPLEX_EXAMPLES +
+        SYNTH_SCHEMA_SIMPLE_EXAMPLES +
+        SYNTH_SCHEMA_MEDIUM_EXAMPLES +
+        SYNTH_SCHEMA_COMPLEX_EXAMPLES +
+        SYNTH_SEED_SIMPLE_EXAMPLES +
+        SYNTH_SEED_MEDIUM_EXAMPLES +
+        SYNTH_SEED_COMPLEX_EXAMPLES
     )
 
     for example in all_examples:
@@ -1590,7 +2073,16 @@ def get_examples_by_agent(agent_name: str) -> list:
         FOLLOWUP_SIMPLE_EXAMPLES +
         FOLLOWUP_MEDIUM_EXAMPLES +
         FOLLOWUP_COMPLEX_EXAMPLES +
-        NEW_QUERY_EXAMPLES
+        NEW_QUERY_EXAMPLES +
+        SYNTH_SIMPLE_EXAMPLES +
+        SYNTH_MEDIUM_EXAMPLES +
+        SYNTH_COMPLEX_EXAMPLES +
+        SYNTH_SCHEMA_SIMPLE_EXAMPLES +
+        SYNTH_SCHEMA_MEDIUM_EXAMPLES +
+        SYNTH_SCHEMA_COMPLEX_EXAMPLES +
+        SYNTH_SEED_SIMPLE_EXAMPLES +
+        SYNTH_SEED_MEDIUM_EXAMPLES +
+        SYNTH_SEED_COMPLEX_EXAMPLES
     )
 
     return [ex for ex in all_examples if ex['agent'] == agent_name]
@@ -1619,7 +2111,16 @@ def get_examples_by_tool(tool_name: str) -> list:
         FOLLOWUP_SIMPLE_EXAMPLES +
         FOLLOWUP_MEDIUM_EXAMPLES +
         FOLLOWUP_COMPLEX_EXAMPLES +
-        NEW_QUERY_EXAMPLES
+        NEW_QUERY_EXAMPLES +
+        SYNTH_SIMPLE_EXAMPLES +
+        SYNTH_MEDIUM_EXAMPLES +
+        SYNTH_COMPLEX_EXAMPLES +
+        SYNTH_SCHEMA_SIMPLE_EXAMPLES +
+        SYNTH_SCHEMA_MEDIUM_EXAMPLES +
+        SYNTH_SCHEMA_COMPLEX_EXAMPLES +
+        SYNTH_SEED_SIMPLE_EXAMPLES +
+        SYNTH_SEED_MEDIUM_EXAMPLES +
+        SYNTH_SEED_COMPLEX_EXAMPLES
     )
 
     return [ex for ex in all_examples if tool_name in ex['expected_tools']]

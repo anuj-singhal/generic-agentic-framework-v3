@@ -7,7 +7,12 @@
       "Bash(python:*)",
       "Bash(dir:*)",
       "mcp__ide__getDiagnostics",
-      "Bash(set:*)"
+      "Bash(set:*)",
+      "WebSearch",
+      "WebFetch(domain:docs.sdv.dev)",
+      "Bash(echo:*)",
+      "Bash(del test_synth.py)",
+      "Bash(del /f \"C:\\\\Anuj\\\\AI\\\\generic-agentic-framework-v3\\\\test_synth.py\")"
     ]
   }
 }

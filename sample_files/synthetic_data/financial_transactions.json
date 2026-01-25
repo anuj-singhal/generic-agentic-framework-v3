@@ -1,0 +1,520 @@
+{
+  "metadata": {
+    "description": "Financial Transactions Database Schema - Banking and Payment Processing",
+    "version": "1.0",
+    "domain": "financial_services",
+    "notes": "Use this schema to create new financial tables that don't exist in the database"
+  },
+  "tables": [
+    {
+      "table_name": "ACCOUNTS",
+      "table_description": "Bank accounts master table containing customer account information",
+      "generation_order": 1,
+      "parent_dependencies": [],
+      "child_dependents": ["CARDS", "BANK_TRANSACTIONS", "ACCOUNT_BALANCES"],
+      "columns": [
+        {
+          "column_name": "ACCOUNT_ID",
+          "data_type": "BIGINT",
+          "description": "Unique identifier for each bank account",
+          "is_primary_key": true,
+          "nullable": false,
+          "sample_values": [100001, 100002, 100003, 100004, 100005]
+        },
+        {
+          "column_name": "ACCOUNT_NUMBER",
+          "data_type": "VARCHAR(20)",
+          "description": "Bank account number (masked)",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["****1234", "****5678", "****9012", "****3456", "****7890"]
+        },
+        {
+          "column_name": "ACCOUNT_HOLDER",
+          "data_type": "VARCHAR(200)",
+          "description": "Name of the account holder",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["John Smith", "Jane Doe", "Robert Johnson", "Emily Chen", "Michael Brown"]
+        },
+        {
+          "column_name": "ACCOUNT_TYPE",
+          "data_type": "VARCHAR(50)",
+          "description": "Type of account (CHECKING, SAVINGS, BUSINESS, etc.)",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["CHECKING", "SAVINGS", "BUSINESS", "MONEY_MARKET", "CD"]
+        },
+        {
+          "column_name": "CURRENCY",
+          "data_type": "VARCHAR(3)",
+          "description": "Account currency code",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["USD", "EUR", "GBP", "AED", "SGD"]
+        },
+        {
+          "column_name": "STATUS",
+          "data_type": "VARCHAR(20)",
+          "description": "Account status",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["ACTIVE", "ACTIVE", "DORMANT", "CLOSED", "FROZEN"]
+        },
+        {
+          "column_name": "OPENED_DATE",
+          "data_type": "DATE",
+          "description": "Date when account was opened",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["2020-01-15", "2019-06-22", "2021-03-10", "2018-11-05", "2022-08-17"]
+        },
+        {
+          "column_name": "BRANCH_CODE",
+          "data_type": "VARCHAR(10)",
+          "description": "Branch identifier where account was opened",
+          "is_primary_key": false,
+          "nullable": true,
+          "sample_values": ["NYC001", "LAX002", "CHI003", "MIA004", "SEA005"]
+        }
+      ]
+    },
+    {
+      "table_name": "CARDS",
+      "table_description": "Credit and debit cards linked to accounts",
+      "generation_order": 2,
+      "parent_dependencies": ["ACCOUNTS"],
+      "child_dependents": ["CARD_TRANSACTIONS"],
+      "columns": [
+        {
+          "column_name": "CARD_ID",
+          "data_type": "BIGINT",
+          "description": "Unique identifier for each card",
+          "is_primary_key": true,
+          "nullable": false,
+          "sample_values": [200001, 200002, 200003, 200004, 200005]
+        },
+        {
+          "column_name": "ACCOUNT_ID",
+          "data_type": "BIGINT",
+          "description": "Foreign key to ACCOUNTS.ACCOUNT_ID",
+          "is_primary_key": false,
+          "nullable": false,
+          "is_foreign_key": true,
+          "references": "ACCOUNTS.ACCOUNT_ID",
+          "sample_values": [100001, 100001, 100002, 100003, 100004]
+        },
+        {
+          "column_name": "CARD_NUMBER",
+          "data_type": "VARCHAR(20)",
+          "description": "Masked card number",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["****1111", "****2222", "****3333", "****4444", "****5555"]
+        },
+        {
+          "column_name": "CARD_TYPE",
+          "data_type": "VARCHAR(20)",
+          "description": "Type of card",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["CREDIT", "DEBIT", "PREPAID", "CREDIT", "DEBIT"]
+        },
+        {
+          "column_name": "CARD_NETWORK",
+          "data_type": "VARCHAR(20)",
+          "description": "Card network/brand",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["VISA", "MASTERCARD", "AMEX", "DISCOVER", "VISA"]
+        },
+        {
+          "column_name": "CREDIT_LIMIT",
+          "data_type": "DECIMAL(18,2)",
+          "description": "Credit limit (for credit cards)",
+          "is_primary_key": false,
+          "nullable": true,
+          "sample_values": [5000.00, 10000.00, null, 15000.00, null]
+        },
+        {
+          "column_name": "EXPIRY_DATE",
+          "data_type": "DATE",
+          "description": "Card expiration date",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["2026-12-31", "2025-06-30", "2027-03-31", "2024-09-30", "2026-01-31"]
+        },
+        {
+          "column_name": "STATUS",
+          "data_type": "VARCHAR(20)",
+          "description": "Card status",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["ACTIVE", "ACTIVE", "BLOCKED", "ACTIVE", "EXPIRED"]
+        }
+      ]
+    },
+    {
+      "table_name": "MERCHANTS",
+      "table_description": "Merchant information for transaction categorization",
+      "generation_order": 1,
+      "parent_dependencies": [],
+      "child_dependents": ["CARD_TRANSACTIONS"],
+      "columns": [
+        {
+          "column_name": "MERCHANT_ID",
+          "data_type": "BIGINT",
+          "description": "Unique identifier for each merchant",
+          "is_primary_key": true,
+          "nullable": false,
+          "sample_values": [300001, 300002, 300003, 300004, 300005]
+        },
+        {
+          "column_name": "MERCHANT_NAME",
+          "data_type": "VARCHAR(200)",
+          "description": "Name of the merchant",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["Amazon", "Walmart", "Starbucks", "Shell Gas", "Netflix"]
+        },
+        {
+          "column_name": "MERCHANT_CATEGORY",
+          "data_type": "VARCHAR(50)",
+          "description": "Merchant category code description",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["RETAIL", "GROCERY", "RESTAURANT", "GAS_STATION", "ENTERTAINMENT"]
+        },
+        {
+          "column_name": "MCC_CODE",
+          "data_type": "VARCHAR(4)",
+          "description": "Merchant Category Code",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["5411", "5912", "5814", "5541", "4899"]
+        },
+        {
+          "column_name": "COUNTRY",
+          "data_type": "VARCHAR(50)",
+          "description": "Merchant country",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["USA", "USA", "USA", "USA", "USA"]
+        },
+        {
+          "column_name": "CITY",
+          "data_type": "VARCHAR(100)",
+          "description": "Merchant city",
+          "is_primary_key": false,
+          "nullable": true,
+          "sample_values": ["Seattle", "Bentonville", "Seattle", "Houston", "Los Gatos"]
+        }
+      ]
+    },
+    {
+      "table_name": "BANK_TRANSACTIONS",
+      "table_description": "Bank account transactions (transfers, deposits, withdrawals)",
+      "generation_order": 2,
+      "parent_dependencies": ["ACCOUNTS"],
+      "child_dependents": [],
+      "columns": [
+        {
+          "column_name": "TRANSACTION_ID",
+          "data_type": "BIGINT",
+          "description": "Unique identifier for each transaction",
+          "is_primary_key": true,
+          "nullable": false,
+          "sample_values": [400001, 400002, 400003, 400004, 400005]
+        },
+        {
+          "column_name": "ACCOUNT_ID",
+          "data_type": "BIGINT",
+          "description": "Foreign key to ACCOUNTS.ACCOUNT_ID",
+          "is_primary_key": false,
+          "nullable": false,
+          "is_foreign_key": true,
+          "references": "ACCOUNTS.ACCOUNT_ID",
+          "sample_values": [100001, 100002, 100001, 100003, 100002]
+        },
+        {
+          "column_name": "TRANSACTION_TYPE",
+          "data_type": "VARCHAR(30)",
+          "description": "Type of transaction",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["DEPOSIT", "WITHDRAWAL", "TRANSFER_OUT", "TRANSFER_IN", "FEE"]
+        },
+        {
+          "column_name": "AMOUNT",
+          "data_type": "DECIMAL(18,2)",
+          "description": "Transaction amount",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": [1500.00, 200.00, 500.00, 500.00, 25.00]
+        },
+        {
+          "column_name": "CURRENCY",
+          "data_type": "VARCHAR(3)",
+          "description": "Transaction currency",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["USD", "USD", "USD", "USD", "USD"]
+        },
+        {
+          "column_name": "TRANSACTION_DATE",
+          "data_type": "TIMESTAMP",
+          "description": "Date and time of transaction",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["2025-01-15 10:30:00", "2025-01-15 14:22:00", "2025-01-16 09:15:00", "2025-01-16 09:15:00", "2025-01-31 23:59:59"]
+        },
+        {
+          "column_name": "DESCRIPTION",
+          "data_type": "VARCHAR(500)",
+          "description": "Transaction description/memo",
+          "is_primary_key": false,
+          "nullable": true,
+          "sample_values": ["Payroll Direct Deposit", "ATM Withdrawal", "Wire Transfer to John", "Wire Transfer from Jane", "Monthly Service Fee"]
+        },
+        {
+          "column_name": "REFERENCE_NUMBER",
+          "data_type": "VARCHAR(50)",
+          "description": "Transaction reference number",
+          "is_primary_key": false,
+          "nullable": true,
+          "sample_values": ["REF001234", "ATM789456", "WIRE123456", "WIRE123456", "FEE202501"]
+        },
+        {
+          "column_name": "STATUS",
+          "data_type": "VARCHAR(20)",
+          "description": "Transaction status",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["COMPLETED", "COMPLETED", "COMPLETED", "COMPLETED", "COMPLETED"]
+        }
+      ]
+    },
+    {
+      "table_name": "CARD_TRANSACTIONS",
+      "table_description": "Card-based transactions (purchases, payments, refunds)",
+      "generation_order": 3,
+      "parent_dependencies": ["CARDS", "MERCHANTS"],
+      "child_dependents": [],
+      "columns": [
+        {
+          "column_name": "TRANSACTION_ID",
+          "data_type": "BIGINT",
+          "description": "Unique identifier for each card transaction",
+          "is_primary_key": true,
+          "nullable": false,
+          "sample_values": [500001, 500002, 500003, 500004, 500005]
+        },
+        {
+          "column_name": "CARD_ID",
+          "data_type": "BIGINT",
+          "description": "Foreign key to CARDS.CARD_ID",
+          "is_primary_key": false,
+          "nullable": false,
+          "is_foreign_key": true,
+          "references": "CARDS.CARD_ID",
+          "sample_values": [200001, 200002, 200001, 200003, 200002]
+        },
+        {
+          "column_name": "MERCHANT_ID",
+          "data_type": "BIGINT",
+          "description": "Foreign key to MERCHANTS.MERCHANT_ID",
+          "is_primary_key": false,
+          "nullable": false,
+          "is_foreign_key": true,
+          "references": "MERCHANTS.MERCHANT_ID",
+          "sample_values": [300001, 300002, 300003, 300004, 300005]
+        },
+        {
+          "column_name": "TRANSACTION_TYPE",
+          "data_type": "VARCHAR(20)",
+          "description": "Type of card transaction",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["PURCHASE", "PURCHASE", "PURCHASE", "PURCHASE", "REFUND"]
+        },
+        {
+          "column_name": "AMOUNT",
+          "data_type": "DECIMAL(18,2)",
+          "description": "Transaction amount",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": [125.99, 87.45, 5.75, 45.00, -15.99]
+        },
+        {
+          "column_name": "CURRENCY",
+          "data_type": "VARCHAR(3)",
+          "description": "Transaction currency",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["USD", "USD", "USD", "USD", "USD"]
+        },
+        {
+          "column_name": "TRANSACTION_DATE",
+          "data_type": "TIMESTAMP",
+          "description": "Date and time of transaction",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["2025-01-15 12:34:56", "2025-01-15 15:22:33", "2025-01-16 08:15:00", "2025-01-16 18:45:22", "2025-01-17 10:00:00"]
+        },
+        {
+          "column_name": "AUTH_CODE",
+          "data_type": "VARCHAR(10)",
+          "description": "Authorization code",
+          "is_primary_key": false,
+          "nullable": true,
+          "sample_values": ["AUTH001", "AUTH002", "AUTH003", "AUTH004", "AUTH005"]
+        },
+        {
+          "column_name": "STATUS",
+          "data_type": "VARCHAR(20)",
+          "description": "Transaction status",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["APPROVED", "APPROVED", "APPROVED", "DECLINED", "APPROVED"]
+        },
+        {
+          "column_name": "IS_INTERNATIONAL",
+          "data_type": "BOOLEAN",
+          "description": "Whether transaction was international",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": [false, false, false, true, false]
+        }
+      ]
+    },
+    {
+      "table_name": "ACCOUNT_BALANCES",
+      "table_description": "Daily account balance snapshots",
+      "generation_order": 2,
+      "parent_dependencies": ["ACCOUNTS"],
+      "child_dependents": [],
+      "columns": [
+        {
+          "column_name": "BALANCE_ID",
+          "data_type": "BIGINT",
+          "description": "Unique identifier for each balance record",
+          "is_primary_key": true,
+          "nullable": false,
+          "sample_values": [600001, 600002, 600003, 600004, 600005]
+        },
+        {
+          "column_name": "ACCOUNT_ID",
+          "data_type": "BIGINT",
+          "description": "Foreign key to ACCOUNTS.ACCOUNT_ID",
+          "is_primary_key": false,
+          "nullable": false,
+          "is_foreign_key": true,
+          "references": "ACCOUNTS.ACCOUNT_ID",
+          "sample_values": [100001, 100001, 100002, 100002, 100003]
+        },
+        {
+          "column_name": "BALANCE_DATE",
+          "data_type": "DATE",
+          "description": "Date of balance snapshot",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["2025-01-14", "2025-01-15", "2025-01-14", "2025-01-15", "2025-01-15"]
+        },
+        {
+          "column_name": "OPENING_BALANCE",
+          "data_type": "DECIMAL(18,2)",
+          "description": "Balance at start of day",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": [5000.00, 6500.00, 12000.00, 11800.00, 3500.00]
+        },
+        {
+          "column_name": "CLOSING_BALANCE",
+          "data_type": "DECIMAL(18,2)",
+          "description": "Balance at end of day",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": [6500.00, 6000.00, 11800.00, 11800.00, 3475.00]
+        },
+        {
+          "column_name": "AVAILABLE_BALANCE",
+          "data_type": "DECIMAL(18,2)",
+          "description": "Available balance (accounting for holds)",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": [6500.00, 5500.00, 11800.00, 11300.00, 3475.00]
+        },
+        {
+          "column_name": "CURRENCY",
+          "data_type": "VARCHAR(3)",
+          "description": "Balance currency",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["USD", "USD", "USD", "USD", "USD"]
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "parent_table": "ACCOUNTS",
+      "child_table": "CARDS",
+      "relationship_type": "one-to-many",
+      "parent_key": "ACCOUNT_ID",
+      "foreign_key": "ACCOUNT_ID",
+      "description": "An account can have multiple cards"
+    },
+    {
+      "parent_table": "ACCOUNTS",
+      "child_table": "BANK_TRANSACTIONS",
+      "relationship_type": "one-to-many",
+      "parent_key": "ACCOUNT_ID",
+      "foreign_key": "ACCOUNT_ID",
+      "description": "An account can have multiple bank transactions"
+    },
+    {
+      "parent_table": "ACCOUNTS",
+      "child_table": "ACCOUNT_BALANCES",
+      "relationship_type": "one-to-many",
+      "parent_key": "ACCOUNT_ID",
+      "foreign_key": "ACCOUNT_ID",
+      "description": "An account has daily balance snapshots"
+    },
+    {
+      "parent_table": "CARDS",
+      "child_table": "CARD_TRANSACTIONS",
+      "relationship_type": "one-to-many",
+      "parent_key": "CARD_ID",
+      "foreign_key": "CARD_ID",
+      "description": "A card can have multiple transactions"
+    },
+    {
+      "parent_table": "MERCHANTS",
+      "child_table": "CARD_TRANSACTIONS",
+      "relationship_type": "one-to-many",
+      "parent_key": "MERCHANT_ID",
+      "foreign_key": "MERCHANT_ID",
+      "description": "A merchant can appear in multiple transactions"
+    }
+  ],
+  "generation_workflow": {
+    "description": "Order in which tables must be created/generated to maintain referential integrity",
+    "steps": [
+      {
+        "step": 1,
+        "tables": ["ACCOUNTS", "MERCHANTS"],
+        "notes": "Independent tables with no foreign key dependencies - can be created in parallel"
+      },
+      {
+        "step": 2,
+        "tables": ["CARDS", "BANK_TRANSACTIONS", "ACCOUNT_BALANCES"],
+        "notes": "Depend on ACCOUNTS for foreign key values"
+      },
+      {
+        "step": 3,
+        "tables": ["CARD_TRANSACTIONS"],
+        "notes": "Depends on CARDS and MERCHANTS for foreign key values"
+      }
+    ]
+  }
+}

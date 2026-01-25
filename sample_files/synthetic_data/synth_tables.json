@@ -1,0 +1,436 @@
+{
+  "metadata": {
+    "description": "Synthetic Data Generation Schema Documentation for Wealth Management Database",
+    "version": "1.0",
+    "generator": "SDV (Synthetic Data Vault) - GaussianCopulaSynthesizer",
+    "prefix": "SYNTH_",
+    "notes": "Synthetic tables mirror source tables and are prefixed with SYNTH_"
+  },
+  "tables": [
+    {
+      "table_name": "SYNTH_CLIENTS",
+      "source_table": "CLIENTS",
+      "table_description": "Synthetic client profiles generated from CLIENTS table patterns. No parent dependencies - can be generated independently.",
+      "generation_order": 1,
+      "parent_dependencies": [],
+      "child_dependents": ["SYNTH_PORTFOLIOS"],
+      "columns": [
+        {
+          "column_name": "CLIENT_ID",
+          "data_type": "BIGINT",
+          "sdv_type": "id",
+          "description": "Auto-generated unique identifier (continues from max existing ID)",
+          "is_primary_key": true,
+          "nullable": false,
+          "sample_values": [1011, 1012, 1013, 1014, 1015]
+        },
+        {
+          "column_name": "FULL_NAME",
+          "data_type": "VARCHAR",
+          "sdv_type": "categorical",
+          "description": "Synthetic client name generated from learned patterns",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["Michael Chen", "Sara Khan", "John Patel", "Aisha Al Noor", "Anuj Singhal"]
+        },
+        {
+          "column_name": "COUNTRY",
+          "data_type": "VARCHAR",
+          "sdv_type": "categorical",
+          "description": "Country of residence following original distribution",
+          "is_primary_key": false,
+          "nullable": true,
+          "sample_values": ["UAE", "India", "USA", "UK", "Singapore"]
+        },
+        {
+          "column_name": "RISK_PROFILE",
+          "data_type": "VARCHAR",
+          "sdv_type": "categorical",
+          "description": "Risk classification following original distribution",
+          "is_primary_key": false,
+          "nullable": true,
+          "sample_values": ["Conservative", "Balanced", "Aggressive"]
+        },
+        {
+          "column_name": "ONBOARDING_DATE",
+          "data_type": "DATE",
+          "sdv_type": "datetime",
+          "description": "Synthetic onboarding date following original patterns",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["2024-01-15", "2023-07-03", "2025-02-11", "2022-10-20", "2024-09-01"]
+        },
+        {
+          "column_name": "KYC_STATUS",
+          "data_type": "VARCHAR",
+          "sdv_type": "categorical",
+          "description": "KYC verification status following original distribution",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["Approved", "Pending", "Rejected"]
+        }
+      ]
+    },
+    {
+      "table_name": "SYNTH_PORTFOLIOS",
+      "source_table": "PORTFOLIOS",
+      "table_description": "Synthetic portfolio records. Depends on SYNTH_CLIENTS for CLIENT_ID foreign key values.",
+      "generation_order": 2,
+      "parent_dependencies": ["SYNTH_CLIENTS"],
+      "child_dependents": ["SYNTH_TRANSACTIONS", "SYNTH_HOLDINGS"],
+      "columns": [
+        {
+          "column_name": "PORTFOLIO_ID",
+          "data_type": "BIGINT",
+          "sdv_type": "id",
+          "description": "Auto-generated unique identifier",
+          "is_primary_key": true,
+          "nullable": false,
+          "sample_values": [20016, 20017, 20018, 20019, 20020]
+        },
+        {
+          "column_name": "CLIENT_ID",
+          "data_type": "BIGINT",
+          "sdv_type": "numerical",
+          "description": "Foreign key to SYNTH_CLIENTS.CLIENT_ID",
+          "is_primary_key": false,
+          "nullable": false,
+          "is_foreign_key": true,
+          "references": "SYNTH_CLIENTS.CLIENT_ID",
+          "sample_values": [1011, 1011, 1012, 1013, 1014]
+        },
+        {
+          "column_name": "PORTFOLIO_NAME",
+          "data_type": "VARCHAR",
+          "sdv_type": "categorical",
+          "description": "Synthetic portfolio name",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["Core Growth", "Tech Momentum", "Retirement", "Income", "High Risk Trading"]
+        },
+        {
+          "column_name": "BASE_CURRENCY",
+          "data_type": "VARCHAR",
+          "sdv_type": "categorical",
+          "description": "Portfolio base currency",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["USD", "AED", "EUR", "GBP"]
+        },
+        {
+          "column_name": "INCEPTION_DATE",
+          "data_type": "DATE",
+          "sdv_type": "datetime",
+          "description": "Portfolio start date",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["2022-01-01", "2023-03-15", "2021-06-10", "2024-04-05", "2025-01-20"]
+        },
+        {
+          "column_name": "STATUS",
+          "data_type": "VARCHAR",
+          "sdv_type": "categorical",
+          "description": "Portfolio lifecycle status",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["Active", "Closed", "Suspended"]
+        }
+      ]
+    },
+    {
+      "table_name": "SYNTH_ASSETS",
+      "source_table": "ASSETS",
+      "table_description": "Synthetic tradable instruments. No parent dependencies - can be generated independently.",
+      "generation_order": 1,
+      "parent_dependencies": [],
+      "child_dependents": ["SYNTH_TRANSACTIONS", "SYNTH_HOLDINGS"],
+      "columns": [
+        {
+          "column_name": "ASSET_ID",
+          "data_type": "BIGINT",
+          "sdv_type": "id",
+          "description": "Auto-generated unique identifier",
+          "is_primary_key": true,
+          "nullable": false,
+          "sample_values": [30036, 30037, 30038, 30039, 30040]
+        },
+        {
+          "column_name": "SYMBOL",
+          "data_type": "VARCHAR",
+          "sdv_type": "categorical",
+          "description": "Synthetic ticker symbol",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["AAPL", "MSFT", "NVDA", "SPY", "BTC-USD"]
+        },
+        {
+          "column_name": "ASSET_NAME",
+          "data_type": "VARCHAR",
+          "sdv_type": "categorical",
+          "description": "Full asset name",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["Apple Inc.", "Microsoft Corp.", "NVIDIA Corp.", "SPDR S&P 500 ETF Trust", "Bitcoin"]
+        },
+        {
+          "column_name": "ASSET_TYPE",
+          "data_type": "VARCHAR",
+          "sdv_type": "categorical",
+          "description": "Asset category",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["Equity", "ETF", "Crypto", "Bond", "Commodity"]
+        },
+        {
+          "column_name": "CURRENCY",
+          "data_type": "VARCHAR",
+          "sdv_type": "categorical",
+          "description": "Trading currency",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["USD", "EUR", "GBP", "AED"]
+        },
+        {
+          "column_name": "EXCHANGE",
+          "data_type": "VARCHAR",
+          "sdv_type": "categorical",
+          "description": "Primary exchange",
+          "is_primary_key": false,
+          "nullable": true,
+          "sample_values": ["NASDAQ", "NYSE", "NYSEARCA", "CRYPTO", "LSE"]
+        }
+      ]
+    },
+    {
+      "table_name": "SYNTH_TRANSACTIONS",
+      "source_table": "TRANSACTIONS",
+      "table_description": "Synthetic transaction records. Depends on SYNTH_PORTFOLIOS and SYNTH_ASSETS for foreign key values.",
+      "generation_order": 3,
+      "parent_dependencies": ["SYNTH_PORTFOLIOS", "SYNTH_ASSETS"],
+      "child_dependents": [],
+      "columns": [
+        {
+          "column_name": "TRANSACTION_ID",
+          "data_type": "BIGINT",
+          "sdv_type": "id",
+          "description": "Auto-generated unique identifier",
+          "is_primary_key": true,
+          "nullable": false,
+          "sample_values": [9001201, 9001202, 9001203, 9001204, 9001205]
+        },
+        {
+          "column_name": "PORTFOLIO_ID",
+          "data_type": "BIGINT",
+          "sdv_type": "numerical",
+          "description": "Foreign key to SYNTH_PORTFOLIOS.PORTFOLIO_ID",
+          "is_primary_key": false,
+          "nullable": false,
+          "is_foreign_key": true,
+          "references": "SYNTH_PORTFOLIOS.PORTFOLIO_ID",
+          "sample_values": [20016, 20017, 20018, 20019, 20020]
+        },
+        {
+          "column_name": "ASSET_ID",
+          "data_type": "BIGINT",
+          "sdv_type": "numerical",
+          "description": "Foreign key to SYNTH_ASSETS.ASSET_ID",
+          "is_primary_key": false,
+          "nullable": false,
+          "is_foreign_key": true,
+          "references": "SYNTH_ASSETS.ASSET_ID",
+          "sample_values": [30036, 30037, 30038, 30039, 30040]
+        },
+        {
+          "column_name": "TRADE_DATE",
+          "data_type": "DATE",
+          "sdv_type": "datetime",
+          "description": "Transaction execution date",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["2025-01-10", "2025-01-11", "2025-02-01", "2025-02-07", "2025-03-03"]
+        },
+        {
+          "column_name": "TRANSACTION_TYPE",
+          "data_type": "VARCHAR",
+          "sdv_type": "categorical",
+          "description": "BUY or SELL",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["BUY", "SELL"]
+        },
+        {
+          "column_name": "QUANTITY",
+          "data_type": "DECIMAL(18,6)",
+          "sdv_type": "numerical",
+          "description": "Number of units traded",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": [10.0, 5.0, 25.0, 8.0, 2.0]
+        },
+        {
+          "column_name": "PRICE",
+          "data_type": "DECIMAL(18,6)",
+          "sdv_type": "numerical",
+          "description": "Executed unit price",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": [185.25, 720.10, 412.55, 498.30, 192.75]
+        },
+        {
+          "column_name": "FEES",
+          "data_type": "DECIMAL(18,6)",
+          "sdv_type": "numerical",
+          "description": "Transaction fees",
+          "is_primary_key": false,
+          "nullable": true,
+          "sample_values": [1.25, 2.50, 0.99, 1.10, 0.50]
+        },
+        {
+          "column_name": "CURRENCY",
+          "data_type": "VARCHAR",
+          "sdv_type": "categorical",
+          "description": "Trade currency",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["USD", "EUR", "GBP"]
+        },
+        {
+          "column_name": "CREATED_AT",
+          "data_type": "TIMESTAMP",
+          "sdv_type": "datetime",
+          "description": "Record creation timestamp",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["2025-01-10 14:05:12", "2025-01-11 10:22:45", "2025-02-01 16:01:09"]
+        }
+      ]
+    },
+    {
+      "table_name": "SYNTH_HOLDINGS",
+      "source_table": "HOLDINGS",
+      "table_description": "Synthetic holdings snapshots. Depends on SYNTH_PORTFOLIOS and SYNTH_ASSETS for foreign key values.",
+      "generation_order": 3,
+      "parent_dependencies": ["SYNTH_PORTFOLIOS", "SYNTH_ASSETS"],
+      "child_dependents": [],
+      "columns": [
+        {
+          "column_name": "PORTFOLIO_ID",
+          "data_type": "BIGINT",
+          "sdv_type": "numerical",
+          "description": "Foreign key to SYNTH_PORTFOLIOS.PORTFOLIO_ID (composite PK part 1)",
+          "is_primary_key": true,
+          "nullable": false,
+          "is_foreign_key": true,
+          "references": "SYNTH_PORTFOLIOS.PORTFOLIO_ID",
+          "sample_values": [20016, 20016, 20017, 20018, 20019]
+        },
+        {
+          "column_name": "ASSET_ID",
+          "data_type": "BIGINT",
+          "sdv_type": "numerical",
+          "description": "Foreign key to SYNTH_ASSETS.ASSET_ID (composite PK part 2)",
+          "is_primary_key": true,
+          "nullable": false,
+          "is_foreign_key": true,
+          "references": "SYNTH_ASSETS.ASSET_ID",
+          "sample_values": [30036, 30037, 30038, 30039, 30040]
+        },
+        {
+          "column_name": "QUANTITY",
+          "data_type": "DECIMAL(18,6)",
+          "sdv_type": "numerical",
+          "description": "Current units held",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": [8.0, 5.0, 25.0, 12.0, 0.25]
+        },
+        {
+          "column_name": "AVG_COST",
+          "data_type": "DECIMAL(18,6)",
+          "sdv_type": "numerical",
+          "description": "Weighted average cost per unit",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": [187.125, 720.10, 412.55, 475.33, 40000.0]
+        },
+        {
+          "column_name": "LAST_UPDATED",
+          "data_type": "TIMESTAMP",
+          "sdv_type": "datetime",
+          "description": "Last update timestamp",
+          "is_primary_key": false,
+          "nullable": false,
+          "sample_values": ["2025-03-03 09:15:00", "2025-03-01 18:10:00", "2025-02-10 11:00:00"]
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "parent_table": "SYNTH_CLIENTS",
+      "child_table": "SYNTH_PORTFOLIOS",
+      "relationship_type": "one-to-many",
+      "parent_key": "CLIENT_ID",
+      "foreign_key": "CLIENT_ID",
+      "description": "A client can have multiple portfolios"
+    },
+    {
+      "parent_table": "SYNTH_PORTFOLIOS",
+      "child_table": "SYNTH_TRANSACTIONS",
+      "relationship_type": "one-to-many",
+      "parent_key": "PORTFOLIO_ID",
+      "foreign_key": "PORTFOLIO_ID",
+      "description": "A portfolio can have multiple transactions"
+    },
+    {
+      "parent_table": "SYNTH_ASSETS",
+      "child_table": "SYNTH_TRANSACTIONS",
+      "relationship_type": "one-to-many",
+      "parent_key": "ASSET_ID",
+      "foreign_key": "ASSET_ID",
+      "description": "An asset can appear in multiple transactions"
+    },
+    {
+      "parent_table": "SYNTH_PORTFOLIOS",
+      "child_table": "SYNTH_HOLDINGS",
+      "relationship_type": "one-to-many",
+      "parent_key": "PORTFOLIO_ID",
+      "foreign_key": "PORTFOLIO_ID",
+      "description": "A portfolio can have multiple holdings"
+    },
+    {
+      "parent_table": "SYNTH_ASSETS",
+      "child_table": "SYNTH_HOLDINGS",
+      "relationship_type": "one-to-many",
+      "parent_key": "ASSET_ID",
+      "foreign_key": "ASSET_ID",
+      "description": "An asset can be held in multiple portfolios"
+    }
+  ],
+  "generation_workflow": {
+    "description": "Order in which tables must be generated to maintain referential integrity",
+    "steps": [
+      {
+        "step": 1,
+        "tables": ["SYNTH_CLIENTS", "SYNTH_ASSETS"],
+        "notes": "Independent tables with no foreign key dependencies - can be generated in parallel"
+      },
+      {
+        "step": 2,
+        "tables": ["SYNTH_PORTFOLIOS"],
+        "notes": "Depends on SYNTH_CLIENTS for CLIENT_ID values"
+      },
+      {
+        "step": 3,
+        "tables": ["SYNTH_TRANSACTIONS", "SYNTH_HOLDINGS"],
+        "notes": "Depend on SYNTH_PORTFOLIOS and SYNTH_ASSETS for foreign key values"
+      }
+    ]
+  },
+  "sdv_configuration": {
+    "synthesizer": "GaussianCopulaSynthesizer",
+    "id_generation": "Auto-increment from max existing ID in source + synth tables",
+    "training_data": "Sample from source table (default: 100 rows)",
+    "session_tracking": "In-memory session store for multi-step generation"
+  }
+}
