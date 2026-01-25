@@ -1957,6 +1957,237 @@ The workflow should handle the dependency order correctly.""",
 ]
 
 
+# =============================================================================
+# EXPLORATORY DATA ANALYSIS (EDA) EXAMPLES
+# =============================================================================
+
+EDA_SIMPLE_EXAMPLES = [
+    {
+        "name": "List Tables for EDA",
+        "agent": "eda_agent",
+        "query": "What tables are available in the database for analysis?",
+        "expected_tools": ["list_tables_for_eda"],
+        "description": "List all tables with row and column counts"
+    },
+    {
+        "name": "Get Table Info",
+        "agent": "eda_agent",
+        "query": "Show me the schema and column types for the CLIENTS table",
+        "expected_tools": ["get_table_info_for_eda"],
+        "description": "Get detailed schema with column classification"
+    },
+    {
+        "name": "Load Table for Analysis",
+        "agent": "eda_agent",
+        "query": "Load the TRANSACTIONS table into pandas for EDA",
+        "expected_tools": ["load_table_to_pandas"],
+        "description": "Create EDA session by loading table data"
+    },
+    {
+        "name": "Basic Statistics",
+        "agent": "eda_agent",
+        "query": "Load the HOLDINGS table and show me basic statistics for all numeric columns",
+        "expected_tools": ["load_table_to_pandas", "get_basic_statistics"],
+        "description": "Descriptive statistics for numeric columns"
+    },
+    {
+        "name": "Check Missing Values",
+        "agent": "eda_agent",
+        "query": "Load the CLIENTS table and check for missing values",
+        "expected_tools": ["load_table_to_pandas", "check_missing_values"],
+        "description": "Missing value analysis"
+    },
+    {
+        "name": "Check Duplicates",
+        "agent": "eda_agent",
+        "query": "Load ASSETS and check if there are any duplicate rows",
+        "expected_tools": ["load_table_to_pandas", "check_duplicates"],
+        "description": "Duplicate row detection"
+    },
+]
+
+EDA_MEDIUM_EXAMPLES = [
+    {
+        "name": "Basic EDA Suite",
+        "agent": "eda_agent",
+        "query": """Perform basic EDA on the CLIENTS table:
+1. Load the data
+2. Get basic statistics
+3. Check missing values
+4. Check duplicates
+5. Analyze data types""",
+        "expected_tools": ["load_table_to_pandas", "get_basic_statistics", "check_missing_values", "check_duplicates", "check_data_types"],
+        "description": "Run standard basic EDA checks"
+    },
+    {
+        "name": "Categorical Analysis",
+        "agent": "eda_agent",
+        "query": """Analyze the categorical columns in the CLIENTS table:
+1. Load the data
+2. Get unique value counts
+3. Do deep categorical analysis""",
+        "expected_tools": ["load_table_to_pandas", "get_unique_value_counts", "analyze_categorical_columns"],
+        "description": "Deep dive into categorical columns"
+    },
+    {
+        "name": "Numerical Analysis",
+        "agent": "eda_agent",
+        "query": """Analyze the numerical columns in the HOLDINGS table:
+1. Load the data
+2. Get basic statistics
+3. Perform deep numerical analysis
+4. Detect outliers using IQR method""",
+        "expected_tools": ["load_table_to_pandas", "get_basic_statistics", "analyze_numerical_columns", "detect_outliers"],
+        "description": "Comprehensive numerical column analysis"
+    },
+    {
+        "name": "Distribution Analysis",
+        "agent": "eda_agent",
+        "query": """Analyze the distributions of numeric columns in TRANSACTIONS:
+1. Load the data
+2. Analyze distributions with normality tests
+3. Detect outliers""",
+        "expected_tools": ["load_table_to_pandas", "analyze_distributions", "detect_outliers"],
+        "description": "Distribution analysis with normality testing"
+    },
+    {
+        "name": "Correlation Analysis",
+        "agent": "eda_agent",
+        "query": """Find correlations between numeric columns in the TRANSACTIONS table:
+1. Load the data
+2. Calculate correlation matrix
+3. Identify highly correlated pairs""",
+        "expected_tools": ["load_table_to_pandas", "analyze_correlations"],
+        "description": "Correlation analysis for numeric columns"
+    },
+    {
+        "name": "Data Quality Check",
+        "agent": "eda_agent",
+        "query": """Assess the data quality of the PORTFOLIOS table:
+1. Load the data
+2. Check missing values
+3. Check duplicates
+4. Run comprehensive data quality assessment""",
+        "expected_tools": ["load_table_to_pandas", "check_missing_values", "check_duplicates", "check_data_quality"],
+        "description": "Comprehensive data quality assessment"
+    },
+    {
+        "name": "Datetime Analysis",
+        "agent": "eda_agent",
+        "query": """Analyze temporal patterns in the TRANSACTIONS table:
+1. Load the data
+2. Analyze datetime columns for patterns, gaps, and range""",
+        "expected_tools": ["load_table_to_pandas", "analyze_datetime_columns"],
+        "description": "Temporal analysis of datetime columns"
+    },
+]
+
+EDA_COMPLEX_EXAMPLES = [
+    {
+        "name": "Complete EDA - TRANSACTIONS",
+        "agent": "eda_agent",
+        "query": """Perform a complete exploratory data analysis on the TRANSACTIONS table as a data scientist would:
+
+1. Start with discovery - understand the table structure
+2. Load the data for analysis
+3. Basic analysis: statistics, missing values, duplicates, data types
+4. Deep analysis: numerical columns, distributions, outliers
+5. Temporal analysis since it has datetime columns
+6. Correlation analysis between numeric columns
+7. Data quality assessment
+8. Generate final EDA summary with all findings""",
+        "expected_tools": ["list_tables_for_eda", "get_table_info_for_eda", "load_table_to_pandas", "get_basic_statistics", "check_missing_values", "check_duplicates", "check_data_types", "analyze_numerical_columns", "analyze_distributions", "detect_outliers", "analyze_datetime_columns", "analyze_correlations", "check_data_quality", "get_eda_summary"],
+        "description": "Full EDA workflow covering all aspects"
+    },
+    {
+        "name": "Complete EDA - CLIENTS",
+        "agent": "eda_agent",
+        "query": """Do a thorough EDA on the CLIENTS table:
+1. Understand the schema and column types
+2. Load data and create session
+3. Run all basic EDA checks
+4. Analyze categorical columns (COUNTRY, RISK_PROFILE, KYC_STATUS)
+5. Analyze datetime columns (ONBOARDING_DATE)
+6. Check data quality
+7. Analyze column relationships
+8. Generate comprehensive summary""",
+        "expected_tools": ["get_table_info_for_eda", "load_table_to_pandas", "get_basic_statistics", "check_missing_values", "check_duplicates", "check_data_types", "get_unique_value_counts", "analyze_categorical_columns", "analyze_datetime_columns", "check_data_quality", "analyze_column_relationships", "get_eda_summary"],
+        "description": "Complete EDA for client data"
+    },
+    {
+        "name": "Complete EDA - HOLDINGS",
+        "agent": "eda_agent",
+        "query": """Perform comprehensive EDA on the HOLDINGS table (position snapshots):
+1. Discovery phase - schema and data overview
+2. Basic analysis - stats, missing, duplicates
+3. Deep numerical analysis (QUANTITY, AVG_COST)
+4. Distribution and outlier analysis
+5. Correlation between numeric columns
+6. Data quality assessment
+7. Column relationship analysis (foreign keys)
+8. Generate EDA plan for domain-specific insights
+9. Create final summary report""",
+        "expected_tools": ["list_tables_for_eda", "get_table_info_for_eda", "load_table_to_pandas", "get_basic_statistics", "check_missing_values", "check_duplicates", "analyze_numerical_columns", "analyze_distributions", "detect_outliers", "analyze_correlations", "check_data_quality", "analyze_column_relationships", "generate_eda_plan", "get_eda_summary"],
+        "description": "Complete EDA with domain-specific planning"
+    },
+    {
+        "name": "Multi-Table EDA Comparison",
+        "agent": "eda_agent",
+        "query": """Compare the data quality across multiple tables:
+1. First, list all available tables
+2. Load and analyze CLIENTS - get data quality score
+3. Load and analyze PORTFOLIOS - get data quality score
+4. Load and analyze ASSETS - get data quality score
+5. Summarize findings comparing quality across tables""",
+        "expected_tools": ["list_tables_for_eda", "load_table_to_pandas", "check_data_quality", "get_eda_summary"],
+        "description": "Data quality comparison across tables"
+    },
+    {
+        "name": "Custom Analysis Pipeline",
+        "agent": "eda_agent",
+        "query": """Run a custom EDA pipeline on TRANSACTIONS:
+1. Load the data
+2. Run basic EDA checks
+3. Execute custom analysis: df.groupby('TRANSACTION_TYPE')['QUANTITY'].describe()
+4. Execute custom analysis: df.groupby('CURRENCY')['PRICE'].mean()
+5. Get EDA summary""",
+        "expected_tools": ["load_table_to_pandas", "get_basic_statistics", "check_missing_values", "execute_custom_analysis", "get_eda_summary"],
+        "description": "EDA with custom pandas analysis"
+    },
+    {
+        "name": "Full Portfolio Analysis",
+        "agent": "eda_agent",
+        "query": """Comprehensive EDA of the PORTFOLIOS table for investment analysis:
+
+DISCOVERY:
+- List tables to understand database
+- Get PORTFOLIOS schema
+
+BASIC ANALYSIS:
+- Load data
+- Basic statistics
+- Missing values
+- Duplicates
+- Data types
+- Unique value counts
+
+ADVANCED ANALYSIS:
+- Categorical analysis (STATUS, BASE_CURRENCY)
+- Datetime analysis (INCEPTION_DATE)
+- Column relationships
+
+QUALITY & SUMMARY:
+- Data quality score
+- Generate EDA plan
+- Final summary report
+
+Provide insights relevant to portfolio management.""",
+        "expected_tools": ["list_tables_for_eda", "get_table_info_for_eda", "load_table_to_pandas", "get_basic_statistics", "check_missing_values", "check_duplicates", "check_data_types", "get_unique_value_counts", "analyze_categorical_columns", "analyze_datetime_columns", "analyze_column_relationships", "check_data_quality", "generate_eda_plan", "get_eda_summary"],
+        "description": "Investment portfolio data analysis"
+    },
+]
+
+
 def print_examples():
     """Print all examples in a formatted way."""
 
@@ -1994,8 +2225,11 @@ def print_examples():
         ("🌱 SYNTH SEED SIMPLE", SYNTH_SEED_SIMPLE_EXAMPLES),
         ("🌱 SYNTH SEED MEDIUM", SYNTH_SEED_MEDIUM_EXAMPLES),
         ("🌱 SYNTH SEED COMPLEX", SYNTH_SEED_COMPLEX_EXAMPLES),
+        ("📊 EDA SIMPLE", EDA_SIMPLE_EXAMPLES),
+        ("📊 EDA MEDIUM", EDA_MEDIUM_EXAMPLES),
+        ("📊 EDA COMPLEX", EDA_COMPLEX_EXAMPLES),
     ]
-    
+
     for category_name, examples in all_categories:
         print(f"\n{'='*80}")
         print(f"{category_name}")
@@ -2041,7 +2275,10 @@ def get_example_by_name(name: str) -> dict:
         SYNTH_SCHEMA_COMPLEX_EXAMPLES +
         SYNTH_SEED_SIMPLE_EXAMPLES +
         SYNTH_SEED_MEDIUM_EXAMPLES +
-        SYNTH_SEED_COMPLEX_EXAMPLES
+        SYNTH_SEED_COMPLEX_EXAMPLES +
+        EDA_SIMPLE_EXAMPLES +
+        EDA_MEDIUM_EXAMPLES +
+        EDA_COMPLEX_EXAMPLES
     )
 
     for example in all_examples:
@@ -2082,7 +2319,10 @@ def get_examples_by_agent(agent_name: str) -> list:
         SYNTH_SCHEMA_COMPLEX_EXAMPLES +
         SYNTH_SEED_SIMPLE_EXAMPLES +
         SYNTH_SEED_MEDIUM_EXAMPLES +
-        SYNTH_SEED_COMPLEX_EXAMPLES
+        SYNTH_SEED_COMPLEX_EXAMPLES +
+        EDA_SIMPLE_EXAMPLES +
+        EDA_MEDIUM_EXAMPLES +
+        EDA_COMPLEX_EXAMPLES
     )
 
     return [ex for ex in all_examples if ex['agent'] == agent_name]
@@ -2120,7 +2360,10 @@ def get_examples_by_tool(tool_name: str) -> list:
         SYNTH_SCHEMA_COMPLEX_EXAMPLES +
         SYNTH_SEED_SIMPLE_EXAMPLES +
         SYNTH_SEED_MEDIUM_EXAMPLES +
-        SYNTH_SEED_COMPLEX_EXAMPLES
+        SYNTH_SEED_COMPLEX_EXAMPLES +
+        EDA_SIMPLE_EXAMPLES +
+        EDA_MEDIUM_EXAMPLES +
+        EDA_COMPLEX_EXAMPLES
     )
 
     return [ex for ex in all_examples if tool_name in ex['expected_tools']]
