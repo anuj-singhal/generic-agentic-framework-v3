@@ -1396,25 +1396,44 @@ def run_multi_agent_with_streaming(mission: str, trace_container, status_placeho
     short_term_memory = None
     long_term_memory = None
 
-    # Build short-term memory from recent conversations
+    # Build short-term memory from recent conversations (including SQL context)
     if st.session_state.conversation_memory:
         st_parts = []
         for i, conv in enumerate(st.session_state.conversation_memory, 1):
-            st_parts.append(f"Conversation {i} (Agent: {conv.get('agent', 'unknown')}):")
-            st_parts.append(f"  User: {conv.get('query', '')}")
+            intent = conv.get('intent', 'unknown')
+            st_parts.append(f"--- Conversation {i} (Agent: {conv.get('agent', 'unknown')}, Intent: {intent}) ---")
+            st_parts.append(f"User Query: {conv.get('query', '')}")
+
+            # Include generated SQL if available (for data queries)
+            generated_sql = conv.get('generated_sql')
+            if generated_sql:
+                # Truncate long SQL
+                if len(generated_sql) > 500:
+                    generated_sql = generated_sql[:500] + "..."
+                st_parts.append(f"Generated SQL: {generated_sql}")
+
+            # Include query results summary if available
+            query_results = conv.get('query_results')
+            if query_results:
+                # Truncate results to save tokens
+                if len(query_results) > 300:
+                    query_results = query_results[:300] + "..."
+                st_parts.append(f"Query Results Preview: {query_results}")
+
             # Truncate long responses to save tokens
             response = conv.get('response', '')
             if len(response) > 500:
                 response = response[:500] + "..."
-            st_parts.append(f"  Assistant: {response}")
+            st_parts.append(f"Assistant Response: {response}")
             st_parts.append("")
+
         short_term_memory = "\n".join(st_parts)
 
     # Build long-term memory from historical summaries
     if st.session_state.long_term_memory:
         lt_parts = []
         for i, mem in enumerate(st.session_state.long_term_memory, 1):
-            lt_parts.append(f"Summary {i} (Conversations {mem.get('conversation_range', 'unknown')}):")
+            lt_parts.append(f"--- Summary {i} (Conversations {mem.get('conversation_range', 'unknown')}) ---")
             lt_parts.append(mem.get("summary", ""))
             lt_parts.append("")
         long_term_memory = "\n".join(lt_parts)
@@ -1614,12 +1633,22 @@ def summarize_conversations_for_long_term():
         return
 
     try:
-        # Build conversation text for summarization
+        # Build conversation text for summarization (including SQL context)
         conversations_text = []
         for i, conv in enumerate(st.session_state.conversation_memory, 1):
-            conversations_text.append(f"Conversation {i}:")
-            conversations_text.append(f"User: {conv.get('query', '')}")
-            conversations_text.append(f"Assistant: {conv.get('response', '')}")
+            intent = conv.get('intent', 'unknown')
+            conversations_text.append(f"Conversation {i} (Intent: {intent}):")
+            conversations_text.append(f"User Query: {conv.get('query', '')}")
+
+            # Include SQL if it was a data query
+            generated_sql = conv.get('generated_sql')
+            if generated_sql:
+                # Truncate for summarization
+                if len(generated_sql) > 200:
+                    generated_sql = generated_sql[:200] + "..."
+                conversations_text.append(f"SQL Generated: {generated_sql}")
+
+            conversations_text.append(f"Assistant Response: {conv.get('response', '')}")
             conversations_text.append("")
 
         conversations_str = "\n".join(conversations_text)
@@ -1632,7 +1661,7 @@ def summarize_conversations_for_long_term():
             messages=[
                 {
                     "role": "system",
-                    "content": "You are a helpful assistant that summarizes conversations. Create a concise summary that captures the key topics, questions asked, and important information from the conversations. The summary should be useful for providing context in future conversations."
+                    "content": "You are a helpful assistant that summarizes conversations. Create a concise summary that captures: 1) Key topics and questions asked, 2) Any SQL queries or data requests made, 3) Important findings or answers. The summary should be useful for providing context in future conversations about similar topics or data."
                 },
                 {
                     "role": "user",
@@ -1692,13 +1721,29 @@ def build_memory_context() -> str:
     if st.session_state.conversation_memory:
         memory_parts.append("[SHORT-TERM MEMORY - Recent conversations (use this for follow-up questions)]\n")
         for i, conv in enumerate(st.session_state.conversation_memory, 1):
-            memory_parts.append(f"--- Conversation {i} (Agent: {conv.get('agent', 'unknown')}) ---")
-            memory_parts.append(f"User: {conv.get('query', '')}")
+            intent = conv.get('intent', 'unknown')
+            memory_parts.append(f"--- Conversation {i} (Agent: {conv.get('agent', 'unknown')}, Intent: {intent}) ---")
+            memory_parts.append(f"User Query: {conv.get('query', '')}")
+
+            # Include generated SQL if available
+            generated_sql = conv.get('generated_sql')
+            if generated_sql:
+                if len(generated_sql) > 300:
+                    generated_sql = generated_sql[:300] + "..."
+                memory_parts.append(f"Generated SQL: {generated_sql}")
+
+            # Include query results if available
+            query_results = conv.get('query_results')
+            if query_results:
+                if len(query_results) > 200:
+                    query_results = query_results[:200] + "..."
+                memory_parts.append(f"Results Preview: {query_results}")
+
             # Truncate long responses to save tokens
             response = conv.get('response', '')
             if len(response) > 500:
                 response = response[:500] + "..."
-            memory_parts.append(f"Assistant: {response}")
+            memory_parts.append(f"Assistant Response: {response}")
             memory_parts.append("")
         memory_parts.append("[END OF SHORT-TERM MEMORY]\n")
 
@@ -1729,8 +1774,27 @@ def check_duplicate_question(query: str) -> dict | None:
     return None
 
 
-def store_in_memory(query: str, response: str, agent: str, tokens: int):
-    """Store a conversation in short-term memory and trigger long-term summarization when needed."""
+def store_in_memory(
+    query: str,
+    response: str,
+    agent: str,
+    tokens: int,
+    generated_sql: str = None,
+    query_results: str = None,
+    intent: str = None
+):
+    """
+    Store a conversation in short-term memory and trigger long-term summarization when needed.
+
+    Args:
+        query: User's natural language query
+        response: Agent's response
+        agent: Agent name
+        tokens: Token count
+        generated_sql: SQL query generated (for data_agent)
+        query_results: Results from SQL execution (for data_agent)
+        intent: Query intent (NEW_DATA_QUERY, MODIFIED_QUERY, FOLLOWUP_QUESTION, GENERAL_QUESTION)
+    """
     # Increment total conversation count
     st.session_state.total_conversation_count += 1
 
@@ -1739,7 +1803,11 @@ def store_in_memory(query: str, response: str, agent: str, tokens: int):
         "response": response,
         "agent": agent,
         "tokens": tokens,
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now().isoformat(),
+        # Additional fields for data_agent conversations
+        "generated_sql": generated_sql,
+        "query_results": query_results[:1000] if query_results and len(query_results) > 1000 else query_results,  # Truncate large results
+        "intent": intent
     }
 
     # Add new conversation to short-term memory
@@ -2058,10 +2126,27 @@ def main():
                             "result": result
                         })
 
-                        # Store in memory for future reference
+                        # Store in memory for future reference (including SQL for data_agent)
                         token_stats = result.get("token_stats", {})
                         total_tokens = token_stats.get("total_tokens", 0)
-                        store_in_memory(prompt, final_answer, st.session_state.current_agent, total_tokens)
+
+                        # Extract intent from agent traces
+                        intent = None
+                        agent_traces = result.get("agent_traces", [])
+                        for trace in agent_traces:
+                            if trace.get("agent_id") == "agent1":
+                                intent = trace.get("details", {}).get("intent")
+                                break
+
+                        store_in_memory(
+                            query=prompt,
+                            response=final_answer,
+                            agent=st.session_state.current_agent,
+                            tokens=total_tokens,
+                            generated_sql=result.get("generated_sql"),
+                            query_results=result.get("query_results"),
+                            intent=intent
+                        )
 
                         # Rerun to update sidebar token display
                         st.rerun()

@@ -564,6 +564,11 @@ CURRENT USER QUESTION: {nl_query}
 AVAILABLE DATABASE SCHEMA (for reference):
 {schema_summary}
 
+IMPORTANT: The memory above contains previous User Queries, Generated SQL queries, and Assistant Responses. Use this context to understand:
+- What queries the user has previously asked
+- What SQL was generated for those queries
+- What data/answers they received
+
 DECISION PROCESS (evaluate in this order):
 
 1. **GENERAL_QUESTION**: Is this a general knowledge question NOT about database data?
@@ -572,10 +577,10 @@ DECISION PROCESS (evaluate in this order):
    - Examples of follow-up general questions: "Tell me more about that", "Can you explain further?"
 
 2. **MODIFIED_QUERY**: Does the user want to MODIFY a query mentioned in the conversation memory?
-   - Look at SHORT-TERM MEMORY for recent queries the user asked
-   - If user says "now filter by..." or "add X to that" → this might reference a past query
+   - Look at SHORT-TERM MEMORY for recent "User Query" and "Generated SQL" entries
+   - If user says "now filter by...", "add X to that", "go back to..." → this references a past query
    - Examples: "Now show only high-risk clients", "Add the total value", "Filter the previous results"
-   - Set this to true if the query is clearly modifying something from conversation history
+   - If MODIFIED_QUERY, extract the previous_sql and previous_nl_query from memory
 
 3. **NEW_DATA_QUERY**: Is this a new database query unrelated to conversation history?
    - This is a fresh query that needs SQL generation from scratch
@@ -586,7 +591,9 @@ Respond in JSON format:
     "is_general_question": true/false,
     "general_answer": "If is_general_question=true, provide comprehensive answer using memory context if relevant. Otherwise null.",
     "is_modified_query": true/false,
-    "modification_context": "If is_modified_query=true, describe what query from memory is being modified. Otherwise null.",
+    "modification_context": "If is_modified_query=true, describe what query from memory is being modified and include the previous SQL if found. Otherwise null.",
+    "previous_nl_query": "If is_modified_query=true, the previous user query being modified. Otherwise null.",
+    "previous_sql": "If is_modified_query=true, the previous SQL from memory being modified. Otherwise null.",
     "modification_type": "filter/sort/aggregate/add_columns/other (only if is_modified_query=true)",
     "is_data_query": true/false,
     "reasoning": "Brief explanation of your decision, mentioning if memory context influenced it",
@@ -598,7 +605,7 @@ CRITICAL RULES:
 - ALWAYS check for GENERAL_QUESTION first
 - For general questions that follow up on previous general questions in memory, provide contextual answers
 - is_modified_query can be true even without cache if memory shows a relevant previous query
-- If modified_query is true, we'll need the context from memory to generate proper SQL
+- If modified_query is true, EXTRACT the previous_sql and previous_nl_query from memory
 
 Respond ONLY with JSON."""
 
@@ -725,14 +732,22 @@ Respond ONLY with JSON."""
                 }
                 previous_sql = cached_query.generated_sql
                 previous_results = cached_query.query_results
-            elif has_memory and modification_context:
+            elif has_memory:
                 # Use memory context for modification (when no cache)
+                # LLM should have extracted previous_sql and previous_nl_query from memory
+                memory_previous_sql = result.get("previous_sql")
+                memory_previous_nl_query = result.get("previous_nl_query")
+
                 followup_context = {
+                    "previous_nl_query": memory_previous_nl_query,
+                    "previous_sql": memory_previous_sql,
                     "modification_context": modification_context,
                     "modification_type": result.get("modification_type", "unknown"),
                     "source": "memory",
                     "memory_context": memory_context[:2000] if memory_context else ""  # Truncate for context
                 }
+                previous_sql = memory_previous_sql
+                # previous_results not available from memory, only from cache
 
         # Create output summary
         memory_note = " (memory-influenced)" if memory_influenced else ""
@@ -746,6 +761,10 @@ Respond ONLY with JSON."""
         else:
             output_summary = f"General question - answering directly{memory_note}"
 
+        # Calculate memory lengths for trace
+        st_memory_len = len(state.get("short_term_memory") or "")
+        lt_memory_len = len(state.get("long_term_memory") or "")
+
         trace = self._create_trace(
             agent_id="agent1",
             status="completed",
@@ -756,6 +775,8 @@ Respond ONLY with JSON."""
                 "scenario": "cache+memory" if has_cache else ("memory_only" if has_memory else "no_context"),
                 "has_cache": has_cache,
                 "has_memory": has_memory,
+                "short_term_memory_chars": st_memory_len,
+                "long_term_memory_chars": lt_memory_len,
                 "memory_influenced": memory_influenced,
                 "is_data_query": is_data_query,
                 "is_modified_query": is_modified_query,
@@ -1068,7 +1089,19 @@ Respond ONLY with the JSON, no additional text."""
         response = self.llm.invoke([HumanMessage(content=prompt)])
 
         try:
-            result = json.loads(response.content.strip())
+            # Handle potential markdown code block wrapping
+            content = response.content.strip()
+            if content.startswith("```"):
+                # Remove markdown code block (```json or ```)
+                lines = content.split("\n")
+                # Remove first line (```json) and last line (```)
+                if lines[0].startswith("```"):
+                    lines = lines[1:]
+                if lines and lines[-1].strip() == "```":
+                    lines = lines[:-1]
+                content = "\n".join(lines).strip()
+
+            result = json.loads(content)
             sql = result.get("sql", "")
             explanation = result.get("explanation", "")
         except json.JSONDecodeError:
@@ -1077,6 +1110,15 @@ Respond ONLY with the JSON, no additional text."""
             explanation = ""
             if "```sql" in sql:
                 sql = sql.split("```sql")[1].split("```")[0].strip()
+            elif "```json" in sql:
+                # Try to parse JSON from markdown block
+                try:
+                    json_content = sql.split("```json")[1].split("```")[0].strip()
+                    result = json.loads(json_content)
+                    sql = result.get("sql", "")
+                    explanation = result.get("explanation", "")
+                except:
+                    pass
 
         # Format SQL for readability
         sql = format_sql(sql)
@@ -1182,16 +1224,38 @@ Respond ONLY with the JSON, no additional text."""
         response = self.llm.invoke([HumanMessage(content=prompt)])
 
         try:
-            result = json.loads(response.content.strip())
+            # Handle potential markdown code block wrapping
+            content = response.content.strip()
+            if content.startswith("```"):
+                # Remove markdown code block (```json or ```)
+                lines = content.split("\n")
+                # Remove first line (```json) and last line (```)
+                if lines[0].startswith("```"):
+                    lines = lines[1:]
+                if lines and lines[-1].strip() == "```":
+                    lines = lines[:-1]
+                content = "\n".join(lines).strip()
+
+            result = json.loads(content)
             sql = result.get("sql", "")
             sub_queries = result.get("sub_queries", [])
             explanation = result.get("explanation", "")
         except json.JSONDecodeError:
             sql = response.content.strip()
             explanation = ""
+            sub_queries = []
             if "```sql" in sql:
                 sql = sql.split("```sql")[1].split("```")[0].strip()
-            sub_queries = []
+            elif "```json" in sql:
+                # Try to parse JSON from markdown block
+                try:
+                    json_content = sql.split("```json")[1].split("```")[0].strip()
+                    result = json.loads(json_content)
+                    sql = result.get("sql", "")
+                    sub_queries = result.get("sub_queries", [])
+                    explanation = result.get("explanation", "")
+                except:
+                    pass
 
         # Format SQL for readability
         sql = format_sql(sql)

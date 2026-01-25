@@ -1,11 +1,29 @@
 {
   "description": "Agent1 Conversational Test Examples - Tests for intent classification with memory and cache integration",
-  "version": "1.0",
+  "version": "2.0",
+  "memory_structure": {
+    "short_term_memory_fields": {
+      "query": "User's natural language query",
+      "response": "Agent's response (truncated to 500 chars in memory)",
+      "agent": "Agent name (e.g., data_agent)",
+      "tokens": "Token count for the conversation",
+      "timestamp": "ISO timestamp",
+      "generated_sql": "SQL query generated (if data query) - NEW in v2.0",
+      "query_results": "Results from SQL execution (truncated to 1000 chars) - NEW in v2.0",
+      "intent": "Query intent (NEW_DATA_QUERY, MODIFIED_QUERY, FOLLOWUP_QUESTION, GENERAL_QUESTION) - NEW in v2.0"
+    },
+    "long_term_memory_fields": {
+      "summary": "LLM-generated summary of 5 conversations (includes SQL context)",
+      "conversation_range": "Range of conversation numbers (e.g., '1-5')",
+      "tokens": "Token count for the summary",
+      "timestamp": "ISO timestamp"
+    }
+  },
   "test_scenarios": [
     {
       "scenario_id": "conversation_flow_1",
       "name": "Complete Conversation Flow Test",
-      "description": "Tests all Agent1 intents: NEW_DATA_QUERY, FOLLOWUP_QUESTION, GENERAL_QUESTION, MODIFIED_QUERY with memory integration",
+      "description": "Tests all Agent1 intents: NEW_DATA_QUERY, FOLLOWUP_QUESTION, GENERAL_QUESTION, MODIFIED_QUERY with full memory integration including SQL storage",
       "steps": [
         {
           "step_id": 1,
@@ -16,9 +34,15 @@
             "generates_sql": true,
             "updates_cache": true,
             "updates_short_term_memory": true,
+            "memory_includes_sql": true,
             "clears_cache": false
           },
-          "description": "Fresh query with no cache or memory - should generate SQL and store in cache",
+          "expected_memory_entry": {
+            "query": "Show me all clients in the database",
+            "generated_sql": "SELECT * FROM CLIENTS",
+            "intent": "NEW_DATA_QUERY"
+          },
+          "description": "Fresh query with no cache or memory - should generate SQL, store in cache, and save SQL to short-term memory",
           "expected_tables": ["CLIENTS"],
           "scenario": "no_cache_no_memory"
         },
@@ -31,7 +55,12 @@
             "generates_sql": false,
             "uses_cache": true,
             "updates_cache": false,
-            "provides_direct_answer": true
+            "provides_direct_answer": true,
+            "memory_includes_intent": true
+          },
+          "expected_memory_entry": {
+            "intent": "FOLLOWUP_QUESTION",
+            "generated_sql": null
           },
           "description": "Follow-up question about cached results - should answer from cache without SQL",
           "depends_on_step": 1,
@@ -47,6 +76,10 @@
             "uses_cache": false,
             "provides_direct_answer": true,
             "preserves_cache": true
+          },
+          "expected_memory_entry": {
+            "intent": "GENERAL_QUESTION",
+            "generated_sql": null
           },
           "description": "General knowledge question - should answer directly without SQL, cache should remain intact",
           "scenario": "has_cache_has_memory"
@@ -74,9 +107,10 @@
             "generates_sql": false,
             "uses_memory": true,
             "memory_influenced": true,
-            "provides_direct_answer": true
+            "provides_direct_answer": true,
+            "should_reference_step_1_sql": true
           },
-          "description": "Tests short-term memory recall - should reference previous conversations",
+          "description": "Tests short-term memory recall - should reference previous conversations including the SQL that was generated",
           "scenario": "has_cache_has_memory"
         },
         {
@@ -88,9 +122,15 @@
             "generates_sql": true,
             "clears_cache": true,
             "updates_cache": true,
-            "updates_short_term_memory": true
+            "updates_short_term_memory": true,
+            "memory_includes_sql": true
           },
-          "description": "New unrelated query - should clear old cache and create new SQL",
+          "expected_memory_entry": {
+            "query": "Show me all portfolios and their base currencies",
+            "generated_sql": "SELECT portfolio_name, base_currency FROM PORTFOLIOS",
+            "intent": "NEW_DATA_QUERY"
+          },
+          "description": "New unrelated query - should clear old cache and create new SQL, stored in memory",
           "expected_tables": ["PORTFOLIOS"],
           "scenario": "has_cache_has_memory"
         },
@@ -103,9 +143,14 @@
             "generates_sql": true,
             "uses_previous_context": true,
             "builds_on_previous_query": true,
-            "updates_cache": true
+            "updates_cache": true,
+            "memory_includes_sql": true
           },
-          "description": "Modified query - should build on previous query with filter",
+          "expected_memory_entry": {
+            "intent": "MODIFIED_QUERY",
+            "generated_sql": "SELECT portfolio_name, base_currency FROM PORTFOLIOS WHERE base_currency = 'USD'"
+          },
+          "description": "Modified query - should build on previous query with filter, uses cache context",
           "depends_on_step": 6,
           "expected_modification_type": "filter",
           "scenario": "has_cache_has_memory"
@@ -143,9 +188,9 @@
       ]
     },
     {
-      "scenario_id": "memory_only_flow",
-      "name": "Memory-Only Modified Query Test",
-      "description": "Tests modified query detection using memory when cache is cleared",
+      "scenario_id": "memory_only_modified_query",
+      "name": "Memory-Only Modified Query Test (Using SQL from Memory)",
+      "description": "Tests modified query detection using SQL stored in memory when cache is cleared - NEW v2.0 capability",
       "steps": [
         {
           "step_id": 1,
@@ -155,9 +200,13 @@
           "expected_behavior": {
             "generates_sql": true,
             "updates_cache": true,
-            "updates_short_term_memory": true
+            "updates_short_term_memory": true,
+            "memory_stores_sql": true
           },
-          "description": "Initial query to establish memory context",
+          "expected_memory_entry": {
+            "generated_sql": "SELECT * FROM TRANSACTIONS WHERE transaction_date >= DATE_SUB(CURRENT_DATE, INTERVAL 1 MONTH)"
+          },
+          "description": "Initial query to establish memory context with SQL",
           "expected_tables": ["TRANSACTIONS"],
           "scenario": "no_cache_no_memory"
         },
@@ -171,7 +220,7 @@
             "clears_previous_cache": true,
             "updates_cache": true
           },
-          "description": "New query that clears the cache from step 1",
+          "description": "New query that clears the cache from step 1 BUT memory still has step 1's SQL",
           "expected_tables": ["ASSETS"],
           "scenario": "has_cache_has_memory"
         },
@@ -183,10 +232,16 @@
           "expected_behavior": {
             "generates_sql": true,
             "uses_memory_context": true,
+            "extracts_previous_sql_from_memory": true,
             "memory_influenced": true,
             "references_step_1_via_memory": true
           },
-          "description": "Modified query referencing step 1 via memory (not cache) - should detect modification from conversation history",
+          "expected_followup_context": {
+            "source": "memory",
+            "previous_nl_query": "Show me all transactions from the last month",
+            "previous_sql": "SELECT * FROM TRANSACTIONS WHERE transaction_date >= DATE_SUB(CURRENT_DATE, INTERVAL 1 MONTH)"
+          },
+          "description": "CRITICAL TEST: Modified query referencing step 1 via memory (not cache) - Agent1 should extract previous_sql from memory",
           "depends_on_step": 1,
           "expected_modification_type": "filter",
           "scenario": "has_memory_no_relevant_cache"
@@ -208,6 +263,10 @@
             "provides_direct_answer": true,
             "updates_short_term_memory": true
           },
+          "expected_memory_entry": {
+            "intent": "GENERAL_QUESTION",
+            "generated_sql": null
+          },
           "description": "General knowledge question with no context",
           "scenario": "no_cache_no_memory"
         },
@@ -218,7 +277,8 @@
           "expected_intent": "NEW_DATA_QUERY",
           "expected_behavior": {
             "generates_sql": true,
-            "updates_cache": true
+            "updates_cache": true,
+            "memory_stores_sql": true
           },
           "description": "Data query to establish cache",
           "expected_tables": ["HOLDINGS"],
@@ -232,9 +292,10 @@
           "expected_behavior": {
             "generates_sql": false,
             "provides_direct_answer": true,
-            "preserves_cache": true
+            "preserves_cache": true,
+            "cache_should_still_exist": true
           },
-          "description": "General question WHILE cache exists - cache should NOT be cleared",
+          "description": "General question WHILE cache exists - cache should NOT be cleared (BUG FIX verification)",
           "scenario": "has_cache_has_memory"
         },
         {
@@ -247,7 +308,7 @@
             "uses_cache": true,
             "provides_direct_answer": true
           },
-          "description": "Verify cache still works after general question",
+          "description": "Verify cache still works after general question (validates GENERAL_QUESTION fix)",
           "depends_on_step": 2,
           "scenario": "has_cache_has_memory"
         },
@@ -343,7 +404,8 @@
           "expected_intent": "NEW_DATA_QUERY",
           "expected_behavior": {
             "generates_sql": true,
-            "updates_cache": true
+            "updates_cache": true,
+            "memory_stores_sql": true
           },
           "description": "Base query to modify",
           "expected_tables": ["CLIENTS"],
@@ -407,22 +469,37 @@
   "validation_checklist": {
     "scenario_1_no_cache_no_memory": {
       "possible_intents": ["GENERAL_QUESTION", "NEW_DATA_QUERY"],
-      "cannot_detect": ["FOLLOWUP_QUESTION", "MODIFIED_QUERY"]
+      "cannot_detect": ["FOLLOWUP_QUESTION", "MODIFIED_QUERY"],
+      "context_passed_to_agent1": ["nl_query", "schema_summary"]
     },
     "scenario_2_no_cache_has_memory": {
       "possible_intents": ["GENERAL_QUESTION", "NEW_DATA_QUERY", "MODIFIED_QUERY"],
       "cannot_detect": ["FOLLOWUP_QUESTION"],
-      "note": "MODIFIED_QUERY possible if memory contains relevant previous query"
+      "context_passed_to_agent1": ["nl_query", "schema_summary", "short_term_memory", "long_term_memory"],
+      "note": "MODIFIED_QUERY possible if memory contains relevant previous query with SQL"
     },
     "scenario_3_has_cache_has_memory": {
       "possible_intents": ["GENERAL_QUESTION", "NEW_DATA_QUERY", "MODIFIED_QUERY", "FOLLOWUP_QUESTION"],
+      "context_passed_to_agent1": ["nl_query", "schema_summary", "cache_context", "short_term_memory", "long_term_memory"],
       "note": "Full intent classification capability"
     }
   },
   "test_instructions": {
     "how_to_run": "Execute each step in sequence within a scenario. After each step, verify the expected_intent and expected_behavior match the actual Agent1 output.",
     "cache_verification": "Check query_cache.has_cache() and query_cache.get_cached_query() to verify cache state",
-    "memory_verification": "Check st.session_state.conversation_memory and st.session_state.long_term_memory",
-    "intent_verification": "Check Agent1 trace output for 'intent' field in details"
-  }
+    "memory_verification": {
+      "short_term": "Check st.session_state.conversation_memory - should include generated_sql and intent fields",
+      "long_term": "Check st.session_state.long_term_memory after 5 conversations"
+    },
+    "intent_verification": "Check Agent1 trace output for 'intent' field in details",
+    "sql_in_memory_verification": "After data queries, verify conversation_memory[-1]['generated_sql'] is populated"
+  },
+  "version_2_changes": [
+    "Added generated_sql field to short-term memory entries",
+    "Added query_results field to short-term memory entries (truncated to 1000 chars)",
+    "Added intent field to short-term memory entries",
+    "Enhanced long-term memory summarization to include SQL context",
+    "Agent1 Scenario 2 now extracts previous_sql from memory for MODIFIED_QUERY",
+    "Fixed GENERAL_QUESTION detection when cache exists (was incorrectly being skipped)"
+  ]
 }
