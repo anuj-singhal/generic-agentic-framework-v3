@@ -373,6 +373,111 @@ class MultiAgentDataOrchestrator:
 
         return "\n".join(summary)
 
+    def _get_strict_schema_reference(self) -> str:
+        """
+        Get a STRICT schema reference with explicit column listings.
+        This is used in SQL generation to prevent hallucinated columns.
+        """
+        if not self.schema_document or "tables" not in self.schema_document:
+            return "No schema document available."
+
+        lines = []
+        lines.append("=" * 70)
+        lines.append("STRICT SCHEMA REFERENCE - USE ONLY THESE COLUMNS")
+        lines.append("=" * 70)
+        lines.append("")
+
+        for table in self.schema_document["tables"]:
+            table_name = table["table_name"]
+            lines.append(f"TABLE: {table_name}")
+            lines.append("-" * 50)
+            lines.append("COLUMNS (ONLY THESE EXIST):")
+
+            for col in table["columns"]:
+                col_name = col["column_name"]
+                data_type = col["data_type"]
+                desc = col["description"]
+                pk = " [PK]" if col.get("is_primary_key") else ""
+                lines.append(f"  • {col_name} ({data_type}){pk} - {desc}")
+
+            lines.append("")
+
+        lines.append("=" * 70)
+        lines.append("VALID RELATIONSHIPS (JOIN CONDITIONS):")
+        lines.append("-" * 50)
+        lines.append("• PORTFOLIOS.CLIENT_ID = CLIENTS.CLIENT_ID")
+        lines.append("• TRANSACTIONS.PORTFOLIO_ID = PORTFOLIOS.PORTFOLIO_ID")
+        lines.append("• TRANSACTIONS.ASSET_ID = ASSETS.ASSET_ID")
+        lines.append("• HOLDINGS.PORTFOLIO_ID = PORTFOLIOS.PORTFOLIO_ID")
+        lines.append("• HOLDINGS.ASSET_ID = ASSETS.ASSET_ID")
+        lines.append("=" * 70)
+
+        return "\n".join(lines)
+
+    def _get_all_valid_columns(self) -> dict:
+        """
+        Get a dictionary of all valid columns per table.
+        Used for programmatic validation.
+        """
+        if not self.schema_document or "tables" not in self.schema_document:
+            return {}
+
+        valid_columns = {}
+        for table in self.schema_document["tables"]:
+            table_name = table["table_name"]
+            valid_columns[table_name] = [col["column_name"] for col in table["columns"]]
+
+        return valid_columns
+
+    def _extract_columns_from_sql(self, sql: str) -> dict:
+        """
+        Extract table.column references from SQL query.
+        Returns dict of {table_name: [columns used]}
+        """
+        import re
+
+        # Normalize SQL
+        sql_upper = sql.upper()
+
+        # Extract table aliases
+        # Pattern: FROM/JOIN table_name alias or FROM/JOIN table_name AS alias
+        alias_pattern = r'(?:FROM|JOIN)\s+(\w+)\s+(?:AS\s+)?(\w+)(?:\s|$|,|ON)'
+        aliases = {}
+        for match in re.finditer(alias_pattern, sql_upper, re.IGNORECASE):
+            table_name = match.group(1)
+            alias = match.group(2)
+            if alias.upper() not in ('ON', 'WHERE', 'JOIN', 'LEFT', 'RIGHT', 'INNER', 'OUTER', 'GROUP', 'ORDER', 'HAVING', 'LIMIT', 'AS', 'AND', 'OR'):
+                aliases[alias] = table_name
+
+        # Also handle simple FROM table_name (no alias)
+        simple_from_pattern = r'(?:FROM|JOIN)\s+(\w+)(?:\s+(?:WHERE|ON|JOIN|LEFT|RIGHT|INNER|GROUP|ORDER|HAVING|LIMIT|$))'
+        for match in re.finditer(simple_from_pattern, sql_upper, re.IGNORECASE):
+            table_name = match.group(1)
+            if table_name not in aliases.values():
+                aliases[table_name] = table_name
+
+        # Extract column references with table/alias prefix (e.g., c.FULL_NAME, CLIENTS.FULL_NAME)
+        column_pattern = r'(\w+)\.(\w+)'
+        columns_used = {}
+
+        for match in re.finditer(column_pattern, sql_upper):
+            prefix = match.group(1)
+            column = match.group(2)
+
+            # Skip if it looks like a function or keyword
+            if column in ('COUNT', 'SUM', 'AVG', 'MAX', 'MIN', 'COALESCE', 'CASE', 'WHEN', 'THEN', 'ELSE', 'END', 'AS', 'AND', 'OR', 'NULL'):
+                continue
+
+            # Resolve alias to table name
+            table_name = aliases.get(prefix, prefix)
+
+            if table_name not in columns_used:
+                columns_used[table_name] = set()
+            columns_used[table_name].add(column)
+
+        # Convert sets to lists
+        return {k: list(v) for k, v in columns_used.items()}
+
     def _build_graph(self) -> StateGraph:
         """Build the LangGraph state machine for multi-agent workflow."""
         workflow = StateGraph(MultiAgentState)
@@ -902,7 +1007,7 @@ Respond ONLY with JSON."""
         """
         Agent3: Query Orchestrator Agent
         - Determines if query is SIMPLE or COMPLEX
-        - For complex queries, breaks down into subtasks
+        - For complex queries, breaks down into subtasks with explicit column references
         """
         nl_query = state["nl_query"]
         extracted_schema = state.get("extracted_schema", {})
@@ -915,6 +1020,16 @@ USER QUERY: {nl_query}
 
 AVAILABLE SCHEMA:
 {schema_str}
+
+═══════════════════════════════════════════════════════════════════════════
+VALID COLUMNS REFERENCE (USE ONLY THESE IN SUBTASK DEFINITIONS):
+═══════════════════════════════════════════════════════════════════════════
+CLIENTS: CLIENT_ID, FULL_NAME, COUNTRY, RISK_PROFILE, ONBOARDING_DATE, KYC_STATUS
+PORTFOLIOS: PORTFOLIO_ID, CLIENT_ID, PORTFOLIO_NAME, BASE_CURRENCY, INCEPTION_DATE, STATUS
+ASSETS: ASSET_ID, SYMBOL, ASSET_NAME, ASSET_TYPE, CURRENCY, EXCHANGE
+TRANSACTIONS: TRANSACTION_ID, PORTFOLIO_ID, ASSET_ID, TRADE_DATE, TRANSACTION_TYPE, QUANTITY, PRICE, FEES, CURRENCY, CREATED_AT
+HOLDINGS: PORTFOLIO_ID, ASSET_ID, QUANTITY, AVG_COST, LAST_UPDATED
+═══════════════════════════════════════════════════════════════════════════
 
 COMPLEXITY DEFINITIONS:
 - SIMPLE: Query can be answered with a single task using:
@@ -937,12 +1052,25 @@ Analyze the query and respond in JSON format:
     "complexity": "SIMPLE" or "COMPLEX",
     "reasoning": "Why you classified it this way",
     "subtasks": [
-        "If COMPLEX: First subtask description",
-        "Second subtask description",
+        "If COMPLEX: Subtask description with SPECIFIC COLUMNS to use (e.g., 'Calculate portfolio value using SUM(HOLDINGS.QUANTITY * HOLDINGS.AVG_COST)')",
+        "Second subtask with columns (e.g., 'Get client info using CLIENTS.FULL_NAME, CLIENTS.COUNTRY')",
+        "etc."
+    ],
+    "tables_needed": ["List of tables needed for this query"],
+    "key_calculations": [
+        "For portfolio value: SUM(HOLDINGS.QUANTITY * HOLDINGS.AVG_COST)",
+        "For transaction value: TRANSACTIONS.QUANTITY * TRANSACTIONS.PRICE",
         "etc."
     ],
     "final_synthesis": "If COMPLEX: How to combine subtasks into final CTE query"
 }}
+
+IMPORTANT FOR SUBTASK DEFINITIONS:
+- Be SPECIFIC about which columns to use
+- Reference ONLY columns that exist in the schema above
+- For "total value" calculations, specify: HOLDINGS.QUANTITY * HOLDINGS.AVG_COST
+- For "client name", specify: CLIENTS.FULL_NAME (NOT "client name" or "CLIENT_NAME")
+- For "most recent transaction", specify: MAX(TRANSACTIONS.TRADE_DATE)
 
 For SIMPLE queries, subtasks should be empty or contain just the main task.
 For COMPLEX queries, break down into logical subtasks that can be combined with CTEs.
@@ -1007,17 +1135,38 @@ Respond ONLY with the JSON, no additional text."""
         if retry_count > 0:
             issues = state.get("validation_issues", [])
             suggestions = state.get("validation_suggestions", [])
-            if issues or suggestions:
-                validation_feedback = f"""
+            validation_results = state.get("validation_results", {})
 
-IMPORTANT - PREVIOUS QUERY FAILED VALIDATION. Please fix these issues:
-ISSUES:
-{chr(10).join(f'- {issue}' for issue in issues)}
+            # Extract programmatic check results if available
+            schema_validation = validation_results.get("schema", {})
+            programmatic_check = schema_validation.get("programmatic_check", {})
+            missing_columns = programmatic_check.get("missing_columns", [])
 
-SUGGESTIONS:
-{chr(10).join(f'- {suggestion}' for suggestion in suggestions)}
+            validation_feedback = f"""
 
-Generate a CORRECTED query that addresses all the above issues."""
+═══════════════════════════════════════════════════════════════════════════
+⚠️  CRITICAL: PREVIOUS QUERY FAILED VALIDATION (Attempt {retry_count})
+═══════════════════════════════════════════════════════════════════════════
+
+ISSUES FOUND:
+{chr(10).join(f'  ✗ {issue}' for issue in issues)}
+
+{"INVALID COLUMNS DETECTED: " + ", ".join(missing_columns) if missing_columns else ""}
+
+SUGGESTIONS FOR FIX:
+{chr(10).join(f'  → {suggestion}' for suggestion in suggestions)}
+
+COLUMN REFERENCE GUIDE:
+- For client name: Use CLIENTS.FULL_NAME (not CLIENT_NAME)
+- For portfolio value: Calculate SUM(HOLDINGS.QUANTITY * HOLDINGS.AVG_COST)
+- For transaction value: Calculate TRANSACTIONS.QUANTITY * TRANSACTIONS.PRICE
+- For asset count: Use COUNT(DISTINCT HOLDINGS.ASSET_ID)
+- For recent date: Use MAX(TRANSACTIONS.TRADE_DATE) or MAX(HOLDINGS.LAST_UPDATED)
+
+═══════════════════════════════════════════════════════════════════════════
+GENERATE A CORRECTED QUERY USING ONLY VALID COLUMNS FROM THE SCHEMA
+═══════════════════════════════════════════════════════════════════════════
+"""
 
         schema_str = json.dumps(extracted_schema, indent=2)
 
@@ -1070,8 +1219,24 @@ AVAILABLE SCHEMA:
 {schema_str}
 {followup_section}{validation_feedback}
 
+═══════════════════════════════════════════════════════════════════════════
+VALID COLUMNS PER TABLE (USE ONLY THESE):
+═══════════════════════════════════════════════════════════════════════════
+CLIENTS: CLIENT_ID, FULL_NAME, COUNTRY, RISK_PROFILE, ONBOARDING_DATE, KYC_STATUS
+PORTFOLIOS: PORTFOLIO_ID, CLIENT_ID, PORTFOLIO_NAME, BASE_CURRENCY, INCEPTION_DATE, STATUS
+ASSETS: ASSET_ID, SYMBOL, ASSET_NAME, ASSET_TYPE, CURRENCY, EXCHANGE
+TRANSACTIONS: TRANSACTION_ID, PORTFOLIO_ID, ASSET_ID, TRADE_DATE, TRANSACTION_TYPE, QUANTITY, PRICE, FEES, CURRENCY, CREATED_AT
+HOLDINGS: PORTFOLIO_ID, ASSET_ID, QUANTITY, AVG_COST, LAST_UPDATED
+═══════════════════════════════════════════════════════════════════════════
+
+CRITICAL: Only use columns listed above. Do NOT use:
+- CLIENT_NAME (use FULL_NAME)
+- PORTFOLIO_VALUE (calculate: QUANTITY * AVG_COST)
+- TOTAL_VALUE (must be calculated)
+- Any column not explicitly listed
+
 Generate a SQL query that:
-1. Uses the correct table and column names from the schema
+1. Uses ONLY the correct table and column names from the schema above
 2. Includes proper JOINs if multiple tables are needed
 3. Uses appropriate WHERE clauses for filtering
 4. Includes GROUP BY with aggregate functions if needed
@@ -1154,6 +1319,9 @@ Respond ONLY with the JSON, no additional text."""
         """Agent 4.2: Generate complex SQL query with CTEs."""
         subtasks_str = "\n".join(f"{i+1}. {task}" for i, task in enumerate(subtasks))
 
+        # Get strict schema reference for complex queries
+        strict_schema = self._get_strict_schema_reference()
+
         # Build follow-up context section if this is a follow-up query
         followup_section = ""
         followup_context = state.get("followup_context")
@@ -1186,9 +1354,43 @@ USER QUERY: {nl_query}
 SUBTASKS TO ADDRESS:
 {subtasks_str}
 
-AVAILABLE SCHEMA:
+{strict_schema}
+
+ADDITIONAL SCHEMA CONTEXT:
 {schema_str}
 {followup_section}{validation_feedback}
+
+═══════════════════════════════════════════════════════════════════════════
+CRITICAL RULES - READ CAREFULLY BEFORE GENERATING SQL
+═══════════════════════════════════════════════════════════════════════════
+
+1. **ONLY USE COLUMNS THAT EXIST** - Every column in your SQL MUST exist in the schema above.
+   DO NOT invent columns like:
+   - PORTFOLIO_VALUE (does not exist - calculate from HOLDINGS.QUANTITY * HOLDINGS.AVG_COST)
+   - TOTAL_VALUE (does not exist - must be calculated)
+   - CLIENT_NAME (use FULL_NAME from CLIENTS)
+   - ASSET_VALUE (does not exist - calculate from QUANTITY * AVG_COST or QUANTITY * PRICE)
+
+2. **For portfolio value calculations:**
+   - Use: SUM(h.QUANTITY * h.AVG_COST) AS portfolio_value
+   - From: HOLDINGS table joined with PORTFOLIOS
+
+3. **For transaction value calculations:**
+   - Use: (t.QUANTITY * t.PRICE) AS transaction_value
+   - From: TRANSACTIONS table
+
+4. **For most frequent/common aggregations:**
+   - Use: COUNT(*) with GROUP BY and ORDER BY DESC LIMIT 1
+   - Or use window functions with RANK()
+
+5. **CTE column aliases:**
+   - When you create a calculated column in a CTE (e.g., SUM(...) AS total_value)
+   - That alias becomes available in subsequent CTEs or final SELECT
+   - BUT base table columns remain unchanged
+
+6. **Always prefix columns with table alias** (e.g., c.FULL_NAME, p.PORTFOLIO_ID)
+
+═══════════════════════════════════════════════════════════════════════════
 
 Generate a complex SQL query using CTEs (Common Table Expressions) that:
 1. Creates separate CTEs for each logical subtask
@@ -1196,11 +1398,16 @@ Generate a complex SQL query using CTEs (Common Table Expressions) that:
 3. Synthesizes all subtasks into a final result
 4. Uses meaningful CTE and column names
 5. Is syntactically correct for DuckDB
+6. ONLY uses columns that exist in the schema above
 
 STRUCTURE EXAMPLE:
 WITH
     subtask_1 AS (
-        -- Query for subtask 1
+        -- Query for subtask 1 using ONLY real columns
+        SELECT p.PORTFOLIO_ID, SUM(h.QUANTITY * h.AVG_COST) AS calculated_value
+        FROM PORTFOLIOS p
+        JOIN HOLDINGS h ON p.PORTFOLIO_ID = h.PORTFOLIO_ID
+        GROUP BY p.PORTFOLIO_ID
     ),
     subtask_2 AS (
         -- Query for subtask 2
@@ -1216,6 +1423,7 @@ Respond in JSON format:
         {{"name": "cte_name_1", "purpose": "What this CTE does", "sql": "SELECT ..."}},
         {{"name": "cte_name_2", "purpose": "What this CTE does", "sql": "SELECT ..."}}
     ],
+    "columns_used": ["List every column from base tables you used (e.g., CLIENTS.FULL_NAME, HOLDINGS.QUANTITY)"],
     "explanation": "How the CTEs combine to answer the query"
 }}
 
@@ -1434,33 +1642,65 @@ Respond ONLY with the JSON."""
             return {"is_valid": True, "confidence": 0.7, "issues": [], "suggestions": []}
 
     def _validate_schema(self, sql: str, schema_str: str) -> Dict[str, Any]:
-        """Agent 5.2: Schema Validation"""
-        prompt = f"""You are a STRICT database schema validation expert. Your job is to verify that EVERY column and table referenced in the SQL query EXISTS in the schema.
+        """Agent 5.2: Schema Validation - Hybrid programmatic + LLM validation"""
+
+        # Step 1: Programmatic validation - extract columns used and check against schema
+        valid_columns = self._get_all_valid_columns()
+        columns_used = self._extract_columns_from_sql(sql)
+
+        programmatic_issues = []
+        programmatic_missing = []
+
+        for table, cols in columns_used.items():
+            if table not in valid_columns:
+                # Check if it might be a CTE name (not a base table)
+                # CTEs are defined in the WITH clause
+                if table not in self._extract_cte_names(sql):
+                    programmatic_issues.append(f"Unknown table referenced: {table}")
+            else:
+                for col in cols:
+                    if col not in valid_columns[table]:
+                        programmatic_missing.append(f"{table}.{col}")
+                        programmatic_issues.append(f"Column '{col}' does not exist in table '{table}'. Valid columns are: {', '.join(valid_columns[table])}")
+
+        # Build validation context with programmatic findings
+        programmatic_context = ""
+        if programmatic_issues:
+            programmatic_context = f"""
+
+PROGRAMMATIC VALIDATION FOUND THESE ISSUES:
+{chr(10).join(f'- {issue}' for issue in programmatic_issues)}
+
+Please verify these findings and check for any additional issues."""
+
+        # Step 2: LLM validation for semantic/logical issues
+        prompt = f"""You are a STRICT database schema validation expert. Verify that EVERY column and table in the SQL exists in the schema.
 
 SQL QUERY:
 {sql}
 
 AVAILABLE SCHEMA (ONLY these tables and columns exist):
 {schema_str}
+{programmatic_context}
 
 STRICT VALIDATION RULES:
-1. Extract ALL table names from the SQL (after FROM, JOIN, etc.)
-2. Extract ALL column names from the SQL (in SELECT, WHERE, ON, GROUP BY, ORDER BY, etc.)
-3. For EACH column, verify it EXISTS in the corresponding table in the schema above
-4. If a column is NOT listed in the schema, mark is_valid as FALSE
-5. If a table is NOT listed in the schema, mark is_valid as FALSE
-6. Do NOT assume columns exist - they MUST be explicitly listed in the schema
+1. ONLY columns explicitly listed in the schema exist
+2. Columns like PORTFOLIO_VALUE, TOTAL_VALUE, CLIENT_NAME do NOT exist unless in schema
+3. Calculated columns in CTEs (e.g., SUM(...) AS total) are valid aliases, but base columns must exist
+4. Verify every table.column reference against the schema
 
-COMMON MISTAKES TO CATCH:
-- Columns that "sound reasonable" but don't exist (e.g., "PORTFOLIO_VALUE" when only "PORTFOLIO_NAME" exists)
-- Using aggregate/calculated column names that don't exist in base tables
-- Referencing columns with wrong table aliases
+VALID COLUMNS PER TABLE:
+- CLIENTS: CLIENT_ID, FULL_NAME, COUNTRY, RISK_PROFILE, ONBOARDING_DATE, KYC_STATUS
+- PORTFOLIOS: PORTFOLIO_ID, CLIENT_ID, PORTFOLIO_NAME, BASE_CURRENCY, INCEPTION_DATE, STATUS
+- ASSETS: ASSET_ID, SYMBOL, ASSET_NAME, ASSET_TYPE, CURRENCY, EXCHANGE
+- TRANSACTIONS: TRANSACTION_ID, PORTFOLIO_ID, ASSET_ID, TRADE_DATE, TRANSACTION_TYPE, QUANTITY, PRICE, FEES, CURRENCY, CREATED_AT
+- HOLDINGS: PORTFOLIO_ID, ASSET_ID, QUANTITY, AVG_COST, LAST_UPDATED
 
 Check for:
-1. Every table name exists in the schema
-2. Every column name exists in its respective table (CHECK THE SCHEMA CAREFULLY)
-3. JOINs use columns that actually exist
-4. No imaginary or assumed columns
+1. Invalid column names (columns that don't exist in base tables)
+2. Wrong table references
+3. Incorrect JOIN conditions
+4. Column name typos
 
 Respond in JSON format:
 {{
@@ -1470,7 +1710,7 @@ Respond in JSON format:
     "columns_verified": ["list of columns that exist"],
     "columns_missing": ["list of columns that DO NOT exist in schema"],
     "issues": ["List of schema issues found"],
-    "suggestions": ["How to fix each issue"]
+    "suggestions": ["Specific fixes - e.g., 'Use FULL_NAME instead of CLIENT_NAME'"]
 }}
 
 Respond ONLY with the JSON."""
@@ -1478,9 +1718,76 @@ Respond ONLY with the JSON."""
         response = self.llm.invoke([HumanMessage(content=prompt)])
 
         try:
-            return json.loads(response.content.strip())
+            # Handle potential markdown wrapping
+            content = response.content.strip()
+            if content.startswith("```"):
+                lines = content.split("\n")
+                if lines[0].startswith("```"):
+                    lines = lines[1:]
+                if lines and lines[-1].strip() == "```":
+                    lines = lines[:-1]
+                content = "\n".join(lines).strip()
+
+            result = json.loads(content)
+
+            # Merge programmatic findings with LLM findings
+            llm_issues = result.get("issues", [])
+            llm_missing = result.get("columns_missing", [])
+
+            # Add programmatic issues if not already present
+            for issue in programmatic_issues:
+                if issue not in llm_issues:
+                    llm_issues.append(issue)
+
+            for col in programmatic_missing:
+                if col not in llm_missing:
+                    llm_missing.append(col)
+
+            # Adjust confidence based on programmatic findings
+            confidence = result.get("confidence", 0.7)
+            if programmatic_missing:
+                # Significant penalty for missing columns found programmatically
+                confidence = min(confidence, 0.3)
+                result["is_valid"] = False
+
+            result["issues"] = llm_issues
+            result["columns_missing"] = llm_missing
+            result["confidence"] = confidence
+            result["programmatic_check"] = {
+                "issues_found": len(programmatic_issues),
+                "missing_columns": programmatic_missing
+            }
+
+            return result
         except json.JSONDecodeError:
-            return {"is_valid": True, "confidence": 0.7, "issues": [], "suggestions": []}
+            # If LLM response parsing fails, return programmatic results
+            is_valid = len(programmatic_issues) == 0
+            return {
+                "is_valid": is_valid,
+                "confidence": 0.9 if is_valid else 0.2,
+                "issues": programmatic_issues,
+                "columns_missing": programmatic_missing,
+                "suggestions": ["Fix the column references listed in issues"]
+            }
+
+    def _extract_cte_names(self, sql: str) -> set:
+        """Extract CTE names from a SQL query."""
+        import re
+        # Pattern: name AS ( in WITH clause
+        cte_pattern = r'(\w+)\s+AS\s*\('
+        sql_upper = sql.upper()
+
+        # Only look at the WITH clause part
+        if 'WITH' in sql_upper:
+            # Find everything between WITH and the final SELECT
+            with_match = re.search(r'WITH\s+(.*?)\s+SELECT', sql_upper, re.DOTALL)
+            if with_match:
+                with_clause = with_match.group(1)
+                cte_names = set()
+                for match in re.finditer(cte_pattern, with_clause):
+                    cte_names.add(match.group(1))
+                return cte_names
+        return set()
 
     def _validate_semantic(self, sql: str, nl_query: str, schema_str: str) -> Dict[str, Any]:
         """Agent 5.3: Semantic Validation"""
