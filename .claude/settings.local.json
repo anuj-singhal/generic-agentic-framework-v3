@@ -5,7 +5,8 @@
       "Bash(python run_tests.py:*)",
       "Bash(python -m py_compile:*)",
       "Bash(python:*)",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "mcp__ide__getDiagnostics"
     ]
   }
 }

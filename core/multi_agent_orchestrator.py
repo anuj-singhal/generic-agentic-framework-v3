@@ -227,6 +227,10 @@ class MultiAgentState(TypedDict):
     # Original user query
     nl_query: str
 
+    # Memory context (passed from app.py)
+    short_term_memory: Optional[str]  # Recent conversations
+    long_term_memory: Optional[str]   # Historical summaries
+
     # Agent1 outputs
     is_data_query: bool
     general_answer: Optional[str]
@@ -430,27 +434,63 @@ class MultiAgentDataOrchestrator:
     # =========================================================================
     # AGENT 1: Intent Classification Agent
     # =========================================================================
+    def _build_memory_context_for_prompt(self, state: MultiAgentState) -> str:
+        """Build memory context string for LLM prompt."""
+        memory_parts = []
+
+        # Add long-term memory if available
+        long_term = state.get("long_term_memory", "")
+        if long_term and long_term.strip():
+            memory_parts.append("=== LONG-TERM MEMORY (Historical Context) ===")
+            memory_parts.append(long_term)
+            memory_parts.append("=== END LONG-TERM MEMORY ===\n")
+
+        # Add short-term memory if available
+        short_term = state.get("short_term_memory", "")
+        if short_term and short_term.strip():
+            memory_parts.append("=== SHORT-TERM MEMORY (Recent Conversations) ===")
+            memory_parts.append(short_term)
+            memory_parts.append("=== END SHORT-TERM MEMORY ===\n")
+
+        return "\n".join(memory_parts) if memory_parts else ""
+
+    def _has_memory(self, state: MultiAgentState) -> bool:
+        """Check if state has any memory context."""
+        long_term = state.get("long_term_memory", "")
+        short_term = state.get("short_term_memory", "")
+        return bool((long_term and long_term.strip()) or (short_term and short_term.strip()))
+
     def _agent1_prevalidation(self, state: MultiAgentState) -> Dict[str, Any]:
         """
         Agent1: Intent Classification Agent
 
-        Simplified Flow:
-        1. If NO cache → Check if GENERAL_QUESTION or NEW_DATA_QUERY
-        2. If cache EXISTS → Ask LLM with cached data:
-           a. Can answer from cache? → FOLLOWUP_QUESTION (answer directly)
-           b. Is it a modification? → MODIFIED_QUERY (generate SQL with context)
-           c. Otherwise → NEW_QUERY (clear cache, generate SQL)
+        Enhanced Flow with Memory Integration:
 
-        Cache is cleared ONLY on NEW_QUERY intent.
+        Scenario 1 - No cache, No memory:
+            → Check: GENERAL_QUESTION or NEW_DATA_QUERY
+
+        Scenario 2 - No cache, Has memory:
+            → Pass: NL query + memory context
+            → Check: GENERAL_QUESTION, NEW_DATA_QUERY, or MODIFIED_QUERY
+            → Memory allows detecting modifications to past queries even without cache
+
+        Scenario 3 - Has cache, Has memory:
+            → Pass: NL query + cache data + memory context
+            → Check: GENERAL_QUESTION, FOLLOWUP_QUESTION, NEW_DATA_QUERY, or MODIFIED_QUERY
+            → Full context for best decision
+
+        Cache is cleared ONLY on NEW_DATA_QUERY intent.
         """
         nl_query = state["nl_query"]
         schema_summary = self._get_schema_summary()
         cached_query = query_cache.get_cached_query()
         has_cache = query_cache.has_cache()
+        has_memory = self._has_memory(state)
+        memory_context = self._build_memory_context_for_prompt(state) if has_memory else ""
 
-        # Build prompt based on whether we have cached data
+        # Determine scenario and build appropriate prompt
         if has_cache:
-            # We have cached data - let LLM decide if it can answer from cache
+            # SCENARIO 3: Has cache (and possibly memory)
             cache_context = query_cache.get_cache_context()
 
             prompt = f"""You are an intelligent query classifier. A user has asked a question, and we have CACHED DATA from a previous query.
@@ -459,49 +499,111 @@ YOUR TASK: Analyze the user's question and determine the best way to handle it.
 
 {cache_context}
 
+{memory_context if memory_context else ""}
+
 CURRENT USER QUESTION: {nl_query}
 
 AVAILABLE DATABASE SCHEMA (for reference):
 {schema_summary}
 
-DECISION PROCESS:
-1. **CAN_ANSWER_FROM_CACHE**: Can you answer the user's question by analyzing the CACHED RESULTS above?
+DECISION PROCESS (evaluate in this order):
+
+1. **GENERAL_QUESTION**: Is this a general knowledge question NOT about database data?
+   - Examples: "What is SQL?", "How do JOINs work?", "What does portfolio mean?", "Explain risk profile"
+   - These can be answered WITHOUT querying the database
+   - ALSO check if this relates to a previous general question in memory and provide a contextual answer
+
+2. **CAN_ANSWER_FROM_CACHE**: Can you answer the user's question by analyzing the CACHED RESULTS above?
    - If YES: Analyze the data and provide the SPECIFIC ANSWER (with actual numbers/values)
    - Examples: "How many?", "What's the total?", "Which has the highest?", "Summarize this"
+   - The answer must come DIRECTLY from the cached data
 
-2. **MODIFIED_QUERY**: Does the user want to MODIFY the previous query (filter, sort, add columns, etc.)?
+3. **MODIFIED_QUERY**: Does the user want to MODIFY the previous query (filter, sort, add columns, etc.)?
    - This requires generating NEW SQL based on the previous context
-   - Examples: "Show only from USA", "Add email column", "Sort by value", "Group by country"
+   - Examples: "Show only from USA", "Add email column", "Sort by value", "Group by country", "Filter by high risk"
+   - Check memory for context - user might be modifying a query from conversation history
 
-3. **NEW_QUERY**: Is this a completely NEW question unrelated to the previous query?
+4. **NEW_QUERY**: Is this a completely NEW question unrelated to the previous query or conversation?
    - This clears the cache and starts fresh
    - Examples: "Show me all assets", "What transactions happened today?"
 
-4. **GENERAL_QUESTION**: Is this a general knowledge question (not about database data)?
-   - Examples: "What is SQL?", "How do JOINs work?"
-
 Respond in JSON format:
 {{
+    "is_general_question": true/false,
+    "general_answer": "If is_general_question=true, provide comprehensive answer using memory context if relevant. Otherwise null.",
     "can_answer_from_cache": true/false,
     "cache_answer": "If can_answer_from_cache=true, provide the COMPLETE ANSWER here with specific numbers. Otherwise null.",
     "is_modified_query": true/false,
+    "modification_type": "filter/sort/aggregate/add_columns/other (only if is_modified_query=true)",
     "is_new_query": true/false,
-    "is_general_question": true/false,
-    "reasoning": "Brief explanation of your decision",
+    "reasoning": "Brief explanation of your decision, mentioning if memory context influenced it",
     "related_tables": ["TABLE1", "TABLE2"],
-    "general_answer": "If is_general_question=true, provide answer. Otherwise null."
+    "memory_influenced": true/false
 }}
 
 CRITICAL RULES:
-- For CACHE_ANSWER: Provide ACTUAL NUMBERS from the data (e.g., "Balanced has 4 clients" NOT "count the rows")
-- Only ONE of can_answer_from_cache, is_modified_query, is_new_query, is_general_question should be true
+- ALWAYS check for GENERAL_QUESTION first - these should NOT trigger SQL generation
+- For CACHE_ANSWER: Provide ACTUAL NUMBERS from the data (e.g., "There are 4 high-risk clients" NOT "count the rows")
+- Only ONE of is_general_question, can_answer_from_cache, is_modified_query, is_new_query should be true
 - If the question references "the results", "those", "them", "this data" → likely CACHE or MODIFIED
 - If asking for totally different data → NEW_QUERY
+- For general questions related to previous general questions in memory, provide contextual answers
+
+Respond ONLY with JSON."""
+
+        elif has_memory:
+            # SCENARIO 2: No cache but has memory - can still detect modifications from conversation history
+            prompt = f"""You are an intelligent query classifier. A user has asked a question. We have CONVERSATION MEMORY but no cached query results.
+
+YOUR TASK: Analyze the user's question along with the conversation memory to determine the best way to handle it.
+
+{memory_context}
+
+CURRENT USER QUESTION: {nl_query}
+
+AVAILABLE DATABASE SCHEMA (for reference):
+{schema_summary}
+
+DECISION PROCESS (evaluate in this order):
+
+1. **GENERAL_QUESTION**: Is this a general knowledge question NOT about database data?
+   - Examples: "What is SQL?", "How do JOINs work?", "What does portfolio mean?"
+   - Check if this relates to a previous general question in memory - if so, provide contextual answer
+   - Examples of follow-up general questions: "Tell me more about that", "Can you explain further?"
+
+2. **MODIFIED_QUERY**: Does the user want to MODIFY a query mentioned in the conversation memory?
+   - Look at SHORT-TERM MEMORY for recent queries the user asked
+   - If user says "now filter by..." or "add X to that" → this might reference a past query
+   - Examples: "Now show only high-risk clients", "Add the total value", "Filter the previous results"
+   - Set this to true if the query is clearly modifying something from conversation history
+
+3. **NEW_DATA_QUERY**: Is this a new database query unrelated to conversation history?
+   - This is a fresh query that needs SQL generation from scratch
+   - Examples: "Show me all clients", "List all portfolios"
+
+Respond in JSON format:
+{{
+    "is_general_question": true/false,
+    "general_answer": "If is_general_question=true, provide comprehensive answer using memory context if relevant. Otherwise null.",
+    "is_modified_query": true/false,
+    "modification_context": "If is_modified_query=true, describe what query from memory is being modified. Otherwise null.",
+    "modification_type": "filter/sort/aggregate/add_columns/other (only if is_modified_query=true)",
+    "is_data_query": true/false,
+    "reasoning": "Brief explanation of your decision, mentioning if memory context influenced it",
+    "related_tables": ["TABLE1", "TABLE2"],
+    "memory_influenced": true/false
+}}
+
+CRITICAL RULES:
+- ALWAYS check for GENERAL_QUESTION first
+- For general questions that follow up on previous general questions in memory, provide contextual answers
+- is_modified_query can be true even without cache if memory shows a relevant previous query
+- If modified_query is true, we'll need the context from memory to generate proper SQL
 
 Respond ONLY with JSON."""
 
         else:
-            # No cache - simpler decision between NEW_DATA_QUERY and GENERAL_QUESTION
+            # SCENARIO 1: No cache, No memory - simplest classification
             prompt = f"""You are a query classifier. Determine if this is a DATABASE query or a GENERAL question.
 
 USER QUESTION: {nl_query}
@@ -509,14 +611,27 @@ USER QUESTION: {nl_query}
 AVAILABLE DATABASE SCHEMA:
 {schema_summary}
 
+DECISION PROCESS:
+
+1. **GENERAL_QUESTION**: Is this a general knowledge question NOT about database data?
+   - Examples: "What is SQL?", "How do JOINs work?", "What does portfolio mean?", "Explain risk profiles"
+   - These questions can be answered WITHOUT querying the database
+
+2. **DATA_QUERY**: Does this require querying the database to answer?
+   - Examples: "Show me all clients", "What is the total portfolio value?", "List high-risk clients"
+
 Respond in JSON format:
 {{
-    "is_data_query": true/false,
     "is_general_question": true/false,
+    "general_answer": "If is_general_question=true, provide comprehensive answer. Otherwise null.",
+    "is_data_query": true/false,
     "reasoning": "Brief explanation",
-    "related_tables": ["TABLE1", "TABLE2"],
-    "general_answer": "If is_general_question=true, provide the answer. Otherwise null."
+    "related_tables": ["TABLE1", "TABLE2"]
 }}
+
+CRITICAL RULES:
+- ALWAYS check for GENERAL_QUESTION first
+- General questions should NOT trigger SQL generation
 
 Respond ONLY with JSON."""
 
@@ -524,11 +639,19 @@ Respond ONLY with JSON."""
 
         # Parse response and determine intent
         try:
-            result = json.loads(response.content.strip())
+            # Handle potential markdown code block wrapping
+            content = response.content.strip()
+            if content.startswith("```"):
+                # Remove markdown code block
+                content = content.split("```")[1]
+                if content.startswith("json"):
+                    content = content[4:]
+                content = content.strip()
+            result = json.loads(content)
         except json.JSONDecodeError:
             result = {}
 
-        # Determine intent based on response
+        # Determine intent based on response and scenario
         intent = "NEW_DATA_QUERY"
         is_data_query = True
         is_modified_query = False
@@ -537,10 +660,17 @@ Respond ONLY with JSON."""
         followup_answer = None
         related_tables = result.get("related_tables", [])
         reasoning = result.get("reasoning", "")
+        memory_influenced = result.get("memory_influenced", False)
+        modification_context = result.get("modification_context")
 
         if has_cache:
-            # Parse cache-aware response
-            if result.get("can_answer_from_cache"):
+            # SCENARIO 3: Parse cache-aware response
+            # Check general question FIRST (fix for general_question not working with cache)
+            if result.get("is_general_question"):
+                intent = "GENERAL_QUESTION"
+                is_data_query = False
+                general_answer = result.get("general_answer")
+            elif result.get("can_answer_from_cache"):
                 intent = "FOLLOWUP_QUESTION"
                 is_data_query = False
                 is_followup_question = True
@@ -548,47 +678,73 @@ Respond ONLY with JSON."""
             elif result.get("is_modified_query"):
                 intent = "MODIFIED_QUERY"
                 is_modified_query = True
-            elif result.get("is_general_question"):
-                intent = "GENERAL_QUESTION"
-                is_data_query = False
-                general_answer = result.get("general_answer")
             else:
                 # NEW_QUERY - clear the cache
                 intent = "NEW_DATA_QUERY"
                 query_cache.clear()
+
+        elif has_memory:
+            # SCENARIO 2: Parse memory-aware response (no cache)
+            if result.get("is_general_question"):
+                intent = "GENERAL_QUESTION"
+                is_data_query = False
+                general_answer = result.get("general_answer")
+            elif result.get("is_modified_query"):
+                # Modified query detected from memory context
+                intent = "MODIFIED_QUERY"
+                is_modified_query = True
+                is_data_query = True
+            else:
+                intent = "NEW_DATA_QUERY"
+                is_data_query = True
         else:
-            # No cache - simple classification
+            # SCENARIO 1: No cache, no memory - simple classification
             if result.get("is_general_question"):
                 intent = "GENERAL_QUESTION"
                 is_data_query = False
                 general_answer = result.get("general_answer")
             else:
                 intent = "NEW_DATA_QUERY"
+                is_data_query = True
 
         # Build context for modified queries
         followup_context = None
         previous_sql = None
         previous_results = None
 
-        if is_modified_query and cached_query:
-            followup_context = {
-                "previous_nl_query": cached_query.nl_query,
-                "previous_sql": cached_query.generated_sql,
-                "previous_results": cached_query.query_results,
-                "tables_used": cached_query.tables_used,
-            }
-            previous_sql = cached_query.generated_sql
-            previous_results = cached_query.query_results
+        if is_modified_query:
+            if cached_query:
+                # Use cached query context
+                followup_context = {
+                    "previous_nl_query": cached_query.nl_query,
+                    "previous_sql": cached_query.generated_sql,
+                    "previous_results": cached_query.query_results,
+                    "tables_used": cached_query.tables_used,
+                    "modification_type": result.get("modification_type", "unknown"),
+                    "source": "cache"
+                }
+                previous_sql = cached_query.generated_sql
+                previous_results = cached_query.query_results
+            elif has_memory and modification_context:
+                # Use memory context for modification (when no cache)
+                followup_context = {
+                    "modification_context": modification_context,
+                    "modification_type": result.get("modification_type", "unknown"),
+                    "source": "memory",
+                    "memory_context": memory_context[:2000] if memory_context else ""  # Truncate for context
+                }
 
         # Create output summary
+        memory_note = " (memory-influenced)" if memory_influenced else ""
         if intent == "NEW_DATA_QUERY":
-            output_summary = f"New query{' (cache cleared)' if has_cache and not is_modified_query else ''}. Tables: {', '.join(related_tables) if related_tables else 'analyzing...'}"
+            output_summary = f"New query{' (cache cleared)' if has_cache else ''}{memory_note}. Tables: {', '.join(related_tables) if related_tables else 'analyzing...'}"
         elif intent == "MODIFIED_QUERY":
-            output_summary = f"Modified query (builds on previous). Tables: {', '.join(related_tables) if related_tables else 'analyzing...'}"
+            source = "cache" if cached_query else "memory"
+            output_summary = f"Modified query (from {source}){memory_note}. Tables: {', '.join(related_tables) if related_tables else 'analyzing...'}"
         elif intent == "FOLLOWUP_QUESTION":
-            output_summary = "Follow-up question - answering from cached results"
+            output_summary = f"Follow-up question - answering from cached results{memory_note}"
         else:
-            output_summary = "General question - answering directly"
+            output_summary = f"General question - answering directly{memory_note}"
 
         trace = self._create_trace(
             agent_id="agent1",
@@ -597,7 +753,10 @@ Respond ONLY with JSON."""
             output_summary=output_summary,
             details={
                 "intent": intent,
+                "scenario": "cache+memory" if has_cache else ("memory_only" if has_memory else "no_context"),
                 "has_cache": has_cache,
+                "has_memory": has_memory,
+                "memory_influenced": memory_influenced,
                 "is_data_query": is_data_query,
                 "is_modified_query": is_modified_query,
                 "is_followup_question": is_followup_question,
@@ -1507,12 +1666,19 @@ Please try rephrasing your question or providing more specific details about wha
     # =========================================================================
     # Public Methods
     # =========================================================================
-    def run(self, query: str) -> Dict[str, Any]:
+    def run(
+        self,
+        query: str,
+        short_term_memory: Optional[str] = None,
+        long_term_memory: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Execute the multi-agent workflow with a given query.
 
         Args:
             query: The user's natural language query
+            short_term_memory: Recent conversation history (optional)
+            long_term_memory: Historical summaries (optional)
 
         Returns:
             The final state including the answer and execution trace
@@ -1520,6 +1686,10 @@ Please try rephrasing your question or providing more specific details about wha
         initial_state: MultiAgentState = {
             "messages": [HumanMessage(content=query)],
             "nl_query": query,
+            # Memory context
+            "short_term_memory": short_term_memory,
+            "long_term_memory": long_term_memory,
+            # Agent1 outputs
             "is_data_query": True,
             "general_answer": None,
             "related_tables": [],
@@ -1595,12 +1765,19 @@ Please try rephrasing your question or providing more specific details about wha
 
         return result
 
-    def stream(self, query: str):
+    def stream(
+        self,
+        query: str,
+        short_term_memory: Optional[str] = None,
+        long_term_memory: Optional[str] = None
+    ):
         """
         Stream the multi-agent execution for real-time updates.
 
         Args:
             query: The user's natural language query
+            short_term_memory: Recent conversation history (optional)
+            long_term_memory: Historical summaries (optional)
 
         Yields:
             State updates as they occur
@@ -1608,6 +1785,10 @@ Please try rephrasing your question or providing more specific details about wha
         initial_state: MultiAgentState = {
             "messages": [HumanMessage(content=query)],
             "nl_query": query,
+            # Memory context
+            "short_term_memory": short_term_memory,
+            "long_term_memory": long_term_memory,
+            # Agent1 outputs
             "is_data_query": True,
             "general_answer": None,
             "related_tables": [],

@@ -1392,6 +1392,33 @@ def run_multi_agent_with_streaming(mission: str, trace_container, status_placeho
     # Initialize token counter
     token_counter = get_token_counter(st.session_state.model_name)
 
+    # Build memory context for Agent1
+    short_term_memory = None
+    long_term_memory = None
+
+    # Build short-term memory from recent conversations
+    if st.session_state.conversation_memory:
+        st_parts = []
+        for i, conv in enumerate(st.session_state.conversation_memory, 1):
+            st_parts.append(f"Conversation {i} (Agent: {conv.get('agent', 'unknown')}):")
+            st_parts.append(f"  User: {conv.get('query', '')}")
+            # Truncate long responses to save tokens
+            response = conv.get('response', '')
+            if len(response) > 500:
+                response = response[:500] + "..."
+            st_parts.append(f"  Assistant: {response}")
+            st_parts.append("")
+        short_term_memory = "\n".join(st_parts)
+
+    # Build long-term memory from historical summaries
+    if st.session_state.long_term_memory:
+        lt_parts = []
+        for i, mem in enumerate(st.session_state.long_term_memory, 1):
+            lt_parts.append(f"Summary {i} (Conversations {mem.get('conversation_range', 'unknown')}):")
+            lt_parts.append(mem.get("summary", ""))
+            lt_parts.append("")
+        long_term_memory = "\n".join(lt_parts)
+
     # Track displayed traces and messages
     displayed_traces = set()
     displayed_messages = set()
@@ -1405,9 +1432,13 @@ def run_multi_agent_with_streaming(mission: str, trace_container, status_placeho
     # Create a container for agent cards
     agents_container = trace_container.container()
 
-    # Stream the execution
+    # Stream the execution with memory context
     try:
-        for state_update in orchestrator.stream(mission):
+        for state_update in orchestrator.stream(
+            mission,
+            short_term_memory=short_term_memory,
+            long_term_memory=long_term_memory
+        ):
             for node_name, node_state in state_update.items():
                 if node_name == "__end__":
                     continue

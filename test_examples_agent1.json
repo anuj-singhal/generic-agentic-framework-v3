@@ -1,0 +1,428 @@
+{
+  "description": "Agent1 Conversational Test Examples - Tests for intent classification with memory and cache integration",
+  "version": "1.0",
+  "test_scenarios": [
+    {
+      "scenario_id": "conversation_flow_1",
+      "name": "Complete Conversation Flow Test",
+      "description": "Tests all Agent1 intents: NEW_DATA_QUERY, FOLLOWUP_QUESTION, GENERAL_QUESTION, MODIFIED_QUERY with memory integration",
+      "steps": [
+        {
+          "step_id": 1,
+          "type": "NEW_DATA_QUERY",
+          "query": "Show me all clients in the database",
+          "expected_intent": "NEW_DATA_QUERY",
+          "expected_behavior": {
+            "generates_sql": true,
+            "updates_cache": true,
+            "updates_short_term_memory": true,
+            "clears_cache": false
+          },
+          "description": "Fresh query with no cache or memory - should generate SQL and store in cache",
+          "expected_tables": ["CLIENTS"],
+          "scenario": "no_cache_no_memory"
+        },
+        {
+          "step_id": 2,
+          "type": "FOLLOWUP_QUESTION",
+          "query": "How many of them have a high risk profile?",
+          "expected_intent": "FOLLOWUP_QUESTION",
+          "expected_behavior": {
+            "generates_sql": false,
+            "uses_cache": true,
+            "updates_cache": false,
+            "provides_direct_answer": true
+          },
+          "description": "Follow-up question about cached results - should answer from cache without SQL",
+          "depends_on_step": 1,
+          "scenario": "has_cache_has_memory"
+        },
+        {
+          "step_id": 3,
+          "type": "GENERAL_QUESTION",
+          "query": "What is a risk profile in wealth management?",
+          "expected_intent": "GENERAL_QUESTION",
+          "expected_behavior": {
+            "generates_sql": false,
+            "uses_cache": false,
+            "provides_direct_answer": true,
+            "preserves_cache": true
+          },
+          "description": "General knowledge question - should answer directly without SQL, cache should remain intact",
+          "scenario": "has_cache_has_memory"
+        },
+        {
+          "step_id": 4,
+          "type": "FOLLOWUP_QUESTION",
+          "query": "What is the total AUM across all the clients shown?",
+          "expected_intent": "FOLLOWUP_QUESTION",
+          "expected_behavior": {
+            "generates_sql": false,
+            "uses_cache": true,
+            "provides_direct_answer": true
+          },
+          "description": "Another follow-up question - cache should still work after general question",
+          "depends_on_step": 1,
+          "scenario": "has_cache_has_memory"
+        },
+        {
+          "step_id": 5,
+          "type": "MEMORY_TEST",
+          "query": "What queries have I asked so far about clients?",
+          "expected_intent": "GENERAL_QUESTION",
+          "expected_behavior": {
+            "generates_sql": false,
+            "uses_memory": true,
+            "memory_influenced": true,
+            "provides_direct_answer": true
+          },
+          "description": "Tests short-term memory recall - should reference previous conversations",
+          "scenario": "has_cache_has_memory"
+        },
+        {
+          "step_id": 6,
+          "type": "NEW_DATA_QUERY",
+          "query": "Show me all portfolios and their base currencies",
+          "expected_intent": "NEW_DATA_QUERY",
+          "expected_behavior": {
+            "generates_sql": true,
+            "clears_cache": true,
+            "updates_cache": true,
+            "updates_short_term_memory": true
+          },
+          "description": "New unrelated query - should clear old cache and create new SQL",
+          "expected_tables": ["PORTFOLIOS"],
+          "scenario": "has_cache_has_memory"
+        },
+        {
+          "step_id": 7,
+          "type": "MODIFIED_QUERY",
+          "query": "Now filter those to show only USD portfolios",
+          "expected_intent": "MODIFIED_QUERY",
+          "expected_behavior": {
+            "generates_sql": true,
+            "uses_previous_context": true,
+            "builds_on_previous_query": true,
+            "updates_cache": true
+          },
+          "description": "Modified query - should build on previous query with filter",
+          "depends_on_step": 6,
+          "expected_modification_type": "filter",
+          "scenario": "has_cache_has_memory"
+        },
+        {
+          "step_id": 8,
+          "type": "FOLLOWUP_QUESTION",
+          "query": "How many USD portfolios are there?",
+          "expected_intent": "FOLLOWUP_QUESTION",
+          "expected_behavior": {
+            "generates_sql": false,
+            "uses_cache": true,
+            "provides_direct_answer": true
+          },
+          "description": "Follow-up to modified query results - should use updated cache",
+          "depends_on_step": 7,
+          "scenario": "has_cache_has_memory"
+        },
+        {
+          "step_id": 9,
+          "type": "GENERAL_QUESTION_FOLLOWUP",
+          "query": "Can you explain more about risk profiles? What are the different types?",
+          "expected_intent": "GENERAL_QUESTION",
+          "expected_behavior": {
+            "generates_sql": false,
+            "uses_memory": true,
+            "memory_influenced": true,
+            "provides_contextual_answer": true,
+            "references_previous_general_question": true
+          },
+          "description": "Follow-up general question - should use memory to provide contextual answer related to step 3",
+          "relates_to_step": 3,
+          "scenario": "has_cache_has_memory"
+        }
+      ]
+    },
+    {
+      "scenario_id": "memory_only_flow",
+      "name": "Memory-Only Modified Query Test",
+      "description": "Tests modified query detection using memory when cache is cleared",
+      "steps": [
+        {
+          "step_id": 1,
+          "type": "NEW_DATA_QUERY",
+          "query": "Show me all transactions from the last month",
+          "expected_intent": "NEW_DATA_QUERY",
+          "expected_behavior": {
+            "generates_sql": true,
+            "updates_cache": true,
+            "updates_short_term_memory": true
+          },
+          "description": "Initial query to establish memory context",
+          "expected_tables": ["TRANSACTIONS"],
+          "scenario": "no_cache_no_memory"
+        },
+        {
+          "step_id": 2,
+          "type": "NEW_DATA_QUERY",
+          "query": "Show me all assets",
+          "expected_intent": "NEW_DATA_QUERY",
+          "expected_behavior": {
+            "generates_sql": true,
+            "clears_previous_cache": true,
+            "updates_cache": true
+          },
+          "description": "New query that clears the cache from step 1",
+          "expected_tables": ["ASSETS"],
+          "scenario": "has_cache_has_memory"
+        },
+        {
+          "step_id": 3,
+          "type": "MODIFIED_QUERY_FROM_MEMORY",
+          "query": "Go back to the transactions and filter by BUY type only",
+          "expected_intent": "MODIFIED_QUERY",
+          "expected_behavior": {
+            "generates_sql": true,
+            "uses_memory_context": true,
+            "memory_influenced": true,
+            "references_step_1_via_memory": true
+          },
+          "description": "Modified query referencing step 1 via memory (not cache) - should detect modification from conversation history",
+          "depends_on_step": 1,
+          "expected_modification_type": "filter",
+          "scenario": "has_memory_no_relevant_cache"
+        }
+      ]
+    },
+    {
+      "scenario_id": "general_question_sequence",
+      "name": "General Question Memory Chain",
+      "description": "Tests that general questions are properly classified with and without cache, and memory links them",
+      "steps": [
+        {
+          "step_id": 1,
+          "type": "GENERAL_QUESTION",
+          "query": "What is DuckDB and how is it different from PostgreSQL?",
+          "expected_intent": "GENERAL_QUESTION",
+          "expected_behavior": {
+            "generates_sql": false,
+            "provides_direct_answer": true,
+            "updates_short_term_memory": true
+          },
+          "description": "General knowledge question with no context",
+          "scenario": "no_cache_no_memory"
+        },
+        {
+          "step_id": 2,
+          "type": "NEW_DATA_QUERY",
+          "query": "Show me the top 5 holdings by quantity",
+          "expected_intent": "NEW_DATA_QUERY",
+          "expected_behavior": {
+            "generates_sql": true,
+            "updates_cache": true
+          },
+          "description": "Data query to establish cache",
+          "expected_tables": ["HOLDINGS"],
+          "scenario": "no_cache_has_memory"
+        },
+        {
+          "step_id": 3,
+          "type": "GENERAL_QUESTION",
+          "query": "What are holdings in a portfolio?",
+          "expected_intent": "GENERAL_QUESTION",
+          "expected_behavior": {
+            "generates_sql": false,
+            "provides_direct_answer": true,
+            "preserves_cache": true
+          },
+          "description": "General question WHILE cache exists - cache should NOT be cleared",
+          "scenario": "has_cache_has_memory"
+        },
+        {
+          "step_id": 4,
+          "type": "FOLLOWUP_QUESTION",
+          "query": "What is the largest holding shown?",
+          "expected_intent": "FOLLOWUP_QUESTION",
+          "expected_behavior": {
+            "generates_sql": false,
+            "uses_cache": true,
+            "provides_direct_answer": true
+          },
+          "description": "Verify cache still works after general question",
+          "depends_on_step": 2,
+          "scenario": "has_cache_has_memory"
+        },
+        {
+          "step_id": 5,
+          "type": "GENERAL_QUESTION_MEMORY_TEST",
+          "query": "Earlier you explained DuckDB. Can you give me an example SQL query that would work in DuckDB?",
+          "expected_intent": "GENERAL_QUESTION",
+          "expected_behavior": {
+            "generates_sql": false,
+            "uses_memory": true,
+            "memory_influenced": true,
+            "references_step_1": true,
+            "provides_contextual_answer": true
+          },
+          "description": "General question referencing earlier general question via memory",
+          "relates_to_step": 1,
+          "scenario": "has_cache_has_memory"
+        }
+      ]
+    },
+    {
+      "scenario_id": "edge_cases",
+      "name": "Edge Case Tests",
+      "description": "Tests edge cases in intent classification",
+      "steps": [
+        {
+          "step_id": 1,
+          "type": "AMBIGUOUS_QUERY",
+          "query": "Tell me about clients",
+          "expected_intent": "NEW_DATA_QUERY",
+          "expected_behavior": {
+            "generates_sql": true,
+            "interprets_as_data_query": true
+          },
+          "description": "Ambiguous query that could be general or data - should default to data query when schema matches",
+          "expected_tables": ["CLIENTS"],
+          "scenario": "no_cache_no_memory"
+        },
+        {
+          "step_id": 2,
+          "type": "PRONOUN_REFERENCE",
+          "query": "Show me their portfolios",
+          "expected_intent": "MODIFIED_QUERY",
+          "expected_behavior": {
+            "generates_sql": true,
+            "uses_previous_context": true,
+            "understands_pronoun_reference": true
+          },
+          "description": "Query with pronoun referencing previous context",
+          "depends_on_step": 1,
+          "scenario": "has_cache_has_memory"
+        },
+        {
+          "step_id": 3,
+          "type": "EXPLICIT_REFERENCE",
+          "query": "From the results above, which client has the most portfolios?",
+          "expected_intent": "FOLLOWUP_QUESTION",
+          "expected_behavior": {
+            "generates_sql": false,
+            "uses_cache": true,
+            "recognizes_explicit_reference": true
+          },
+          "description": "Explicit reference to previous results",
+          "depends_on_step": 2,
+          "scenario": "has_cache_has_memory"
+        },
+        {
+          "step_id": 4,
+          "type": "MIXED_INTENT",
+          "query": "What is portfolio diversification and show me portfolios with more than 3 assets",
+          "expected_intent": "NEW_DATA_QUERY",
+          "expected_behavior": {
+            "generates_sql": true,
+            "handles_mixed_intent": true,
+            "prioritizes_data_query": true
+          },
+          "description": "Query mixing general question with data request - should prioritize data query",
+          "expected_tables": ["PORTFOLIOS", "HOLDINGS"],
+          "scenario": "has_cache_has_memory"
+        }
+      ]
+    },
+    {
+      "scenario_id": "modification_types",
+      "name": "Different Modification Types",
+      "description": "Tests various types of query modifications",
+      "steps": [
+        {
+          "step_id": 1,
+          "type": "NEW_DATA_QUERY",
+          "query": "Show me all clients with their names and risk profiles",
+          "expected_intent": "NEW_DATA_QUERY",
+          "expected_behavior": {
+            "generates_sql": true,
+            "updates_cache": true
+          },
+          "description": "Base query to modify",
+          "expected_tables": ["CLIENTS"],
+          "scenario": "no_cache_no_memory"
+        },
+        {
+          "step_id": 2,
+          "type": "FILTER_MODIFICATION",
+          "query": "Filter to show only high risk clients",
+          "expected_intent": "MODIFIED_QUERY",
+          "expected_behavior": {
+            "generates_sql": true,
+            "modification_type": "filter"
+          },
+          "description": "Filter modification",
+          "depends_on_step": 1,
+          "scenario": "has_cache_has_memory"
+        },
+        {
+          "step_id": 3,
+          "type": "SORT_MODIFICATION",
+          "query": "Sort those results by client name alphabetically",
+          "expected_intent": "MODIFIED_QUERY",
+          "expected_behavior": {
+            "generates_sql": true,
+            "modification_type": "sort"
+          },
+          "description": "Sort modification",
+          "depends_on_step": 2,
+          "scenario": "has_cache_has_memory"
+        },
+        {
+          "step_id": 4,
+          "type": "ADD_COLUMNS_MODIFICATION",
+          "query": "Also include their email addresses",
+          "expected_intent": "MODIFIED_QUERY",
+          "expected_behavior": {
+            "generates_sql": true,
+            "modification_type": "add_columns"
+          },
+          "description": "Add columns modification",
+          "depends_on_step": 3,
+          "scenario": "has_cache_has_memory"
+        },
+        {
+          "step_id": 5,
+          "type": "AGGREGATE_MODIFICATION",
+          "query": "Now group by risk profile and count them",
+          "expected_intent": "MODIFIED_QUERY",
+          "expected_behavior": {
+            "generates_sql": true,
+            "modification_type": "aggregate"
+          },
+          "description": "Aggregation modification",
+          "depends_on_step": 1,
+          "scenario": "has_cache_has_memory"
+        }
+      ]
+    }
+  ],
+  "validation_checklist": {
+    "scenario_1_no_cache_no_memory": {
+      "possible_intents": ["GENERAL_QUESTION", "NEW_DATA_QUERY"],
+      "cannot_detect": ["FOLLOWUP_QUESTION", "MODIFIED_QUERY"]
+    },
+    "scenario_2_no_cache_has_memory": {
+      "possible_intents": ["GENERAL_QUESTION", "NEW_DATA_QUERY", "MODIFIED_QUERY"],
+      "cannot_detect": ["FOLLOWUP_QUESTION"],
+      "note": "MODIFIED_QUERY possible if memory contains relevant previous query"
+    },
+    "scenario_3_has_cache_has_memory": {
+      "possible_intents": ["GENERAL_QUESTION", "NEW_DATA_QUERY", "MODIFIED_QUERY", "FOLLOWUP_QUESTION"],
+      "note": "Full intent classification capability"
+    }
+  },
+  "test_instructions": {
+    "how_to_run": "Execute each step in sequence within a scenario. After each step, verify the expected_intent and expected_behavior match the actual Agent1 output.",
+    "cache_verification": "Check query_cache.has_cache() and query_cache.get_cached_query() to verify cache state",
+    "memory_verification": "Check st.session_state.conversation_memory and st.session_state.long_term_memory",
+    "intent_verification": "Check Agent1 trace output for 'intent' field in details"
+  }
+}
