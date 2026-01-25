@@ -24,6 +24,9 @@ duckdb>=1.0.0
 # Synthetic Data Generation
 sdv>=1.0.0
 
+# Data Visualization
+plotly>=5.0.0
+
 # RAG (Retrieval-Augmented Generation)
 faiss-cpu>=1.7.4
 pypdf>=3.0.0

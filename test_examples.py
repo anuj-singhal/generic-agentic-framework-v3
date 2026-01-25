@@ -2188,6 +2188,223 @@ Provide insights relevant to portfolio management.""",
 ]
 
 
+# =============================================================================
+# DATA VISUALIZATION (DATAVIZ) EXAMPLES
+# =============================================================================
+
+DATAVIZ_SIMPLE_EXAMPLES = [
+    {
+        "name": "List Tables for Visualization",
+        "agent": "dataviz_agent",
+        "query": "What tables are available for creating dashboards?",
+        "expected_tools": ["list_tables_for_viz"],
+        "description": "List tables with visualization potential"
+    },
+    {
+        "name": "Get Table Schema for Viz",
+        "agent": "dataviz_agent",
+        "query": "Show me the schema of the CLIENTS table with visualization suggestions",
+        "expected_tools": ["get_table_schema_for_viz"],
+        "description": "Get schema with viz recommendations"
+    },
+    {
+        "name": "Analyze Data for Visualization",
+        "agent": "dataviz_agent",
+        "query": "Analyze the TRANSACTIONS table for visualization opportunities",
+        "expected_tools": ["analyze_data_for_viz"],
+        "description": "Analyze data and get visualization suggestions"
+    },
+    {
+        "name": "Load Schema Relationships",
+        "agent": "dataviz_agent",
+        "query": "Load the table relationships from the schema files",
+        "expected_tools": ["load_schema_relationships"],
+        "description": "Load relationships from JSON schema files"
+    },
+    {
+        "name": "Create Simple KPI",
+        "agent": "dataviz_agent",
+        "query": "Create a KPI card showing the total number of clients. First analyze the CLIENTS table to get a session.",
+        "expected_tools": ["analyze_data_for_viz", "create_kpi_card"],
+        "description": "Create a single KPI metric"
+    },
+]
+
+DATAVIZ_MEDIUM_EXAMPLES = [
+    {
+        "name": "Quick Dashboard from Plan",
+        "agent": "dataviz_agent",
+        "query": """Create a quick dashboard for the CLIENTS table:
+1. Analyze the data
+2. Generate a visualization plan
+3. Auto-generate the dashboard from the plan""",
+        "expected_tools": ["analyze_data_for_viz", "generate_viz_plan", "generate_dashboard_from_plan"],
+        "description": "Quick automated dashboard generation"
+    },
+    {
+        "name": "Bar Chart Creation",
+        "agent": "dataviz_agent",
+        "query": """Create a bar chart showing clients by country:
+1. Analyze the CLIENTS table
+2. Create a bar chart with SQL: SELECT COUNTRY, COUNT(*) as count FROM CLIENTS GROUP BY COUNTRY""",
+        "expected_tools": ["analyze_data_for_viz", "create_bar_chart"],
+        "description": "Create a bar chart visualization"
+    },
+    {
+        "name": "Pie Chart Creation",
+        "agent": "dataviz_agent",
+        "query": """Create a pie chart showing the distribution of client risk profiles:
+1. Analyze the CLIENTS table
+2. Create a pie chart for RISK_PROFILE distribution""",
+        "expected_tools": ["analyze_data_for_viz", "create_pie_chart"],
+        "description": "Create a pie chart visualization"
+    },
+    {
+        "name": "Multiple KPIs",
+        "agent": "dataviz_agent",
+        "query": """Create multiple KPI cards for the TRANSACTIONS table:
+1. Analyze TRANSACTIONS
+2. Create KPI for total transactions count
+3. Create KPI for total quantity traded
+4. Create KPI for total fees collected""",
+        "expected_tools": ["analyze_data_for_viz", "create_kpi_card"],
+        "description": "Create multiple KPI metrics"
+    },
+    {
+        "name": "Line Chart for Trends",
+        "agent": "dataviz_agent",
+        "query": """Create a line chart showing transaction trends over time:
+1. Analyze the TRANSACTIONS table
+2. Create a line chart with TRADE_DATE on x-axis and count of transactions on y-axis""",
+        "expected_tools": ["analyze_data_for_viz", "create_line_chart"],
+        "description": "Create a time series line chart"
+    },
+    {
+        "name": "Data Table Visualization",
+        "agent": "dataviz_agent",
+        "query": """Create a data table visualization showing portfolio details:
+1. Analyze PORTFOLIOS
+2. Create a data table showing all portfolios with their details""",
+        "expected_tools": ["analyze_data_for_viz", "create_data_table"],
+        "description": "Create a data table visualization"
+    },
+]
+
+DATAVIZ_COMPLEX_EXAMPLES = [
+    {
+        "name": "Complete Client Dashboard",
+        "agent": "dataviz_agent",
+        "query": """Create a comprehensive dashboard for the CLIENTS table:
+
+1. DISCOVERY: Analyze the CLIENTS table and get schema info
+2. KPIs: Create cards for Total Clients, Countries, and KYC Approved count
+3. CHARTS:
+   - Bar chart: Clients by Country
+   - Pie chart: Risk Profile Distribution
+   - Bar chart: KYC Status breakdown
+4. TABLE: Data table showing all clients
+5. Generate the final HTML dashboard
+
+Name it "Client Analytics Dashboard".""",
+        "expected_tools": ["analyze_data_for_viz", "get_table_schema_for_viz", "create_kpi_card", "create_bar_chart", "create_pie_chart", "create_data_table", "set_dashboard_title", "generate_dashboard"],
+        "description": "Full custom client dashboard"
+    },
+    {
+        "name": "Transaction Analytics Dashboard",
+        "agent": "dataviz_agent",
+        "query": """Create a transaction analytics dashboard:
+
+1. Analyze TRANSACTIONS table
+2. Create KPIs:
+   - Total Transactions
+   - Total Quantity
+   - Total Value (QUANTITY * PRICE)
+   - Average Transaction Size
+3. Create visualizations:
+   - Bar chart: Transactions by Type (BUY vs SELL)
+   - Line chart: Transaction volume over time
+   - Histogram: Price distribution
+   - Pie chart: Transactions by Currency
+4. Add a data table showing recent transactions
+5. Generate the dashboard as "transactions_analytics.html" """,
+        "expected_tools": ["analyze_data_for_viz", "create_kpi_card", "create_bar_chart", "create_line_chart", "create_histogram", "create_pie_chart", "create_data_table", "generate_dashboard"],
+        "description": "Comprehensive transaction analytics"
+    },
+    {
+        "name": "Portfolio Performance Dashboard",
+        "agent": "dataviz_agent",
+        "query": """Create a portfolio performance dashboard using PORTFOLIOS and HOLDINGS:
+
+1. Analyze PORTFOLIOS table for the session
+2. Load schema relationships to understand table connections
+3. Create KPIs:
+   - Total Portfolios
+   - Active Portfolios
+   - Total Holdings Value
+4. Charts:
+   - Bar chart: Portfolios by Status
+   - Pie chart: Portfolios by Base Currency
+   - Bar chart: Top portfolios by number of holdings (requires JOIN)
+5. Generate the complete dashboard""",
+        "expected_tools": ["analyze_data_for_viz", "load_schema_relationships", "create_kpi_card", "create_bar_chart", "create_pie_chart", "generate_dashboard"],
+        "description": "Portfolio dashboard with relationships"
+    },
+    {
+        "name": "Asset Analysis Dashboard",
+        "agent": "dataviz_agent",
+        "query": """Create an asset analysis dashboard:
+
+1. Discovery: List tables and analyze ASSETS
+2. Generate visualization plan automatically
+3. Customize with additional charts:
+   - Scatter plot: Compare different asset characteristics
+   - Bar chart: Assets by Type
+   - Bar chart: Assets by Exchange
+   - Pie chart: Currency distribution
+4. Generate the final dashboard""",
+        "expected_tools": ["list_tables_for_viz", "analyze_data_for_viz", "generate_viz_plan", "create_scatter_plot", "create_bar_chart", "create_pie_chart", "generate_dashboard"],
+        "description": "Asset analysis with auto-plan"
+    },
+    {
+        "name": "Executive Summary Dashboard",
+        "agent": "dataviz_agent",
+        "query": """Create an executive summary dashboard combining data from multiple tables:
+
+1. Start with CLIENTS analysis for the session
+2. Create high-level KPIs:
+   - Total Clients: SELECT COUNT(*) FROM CLIENTS
+   - Total Portfolios: SELECT COUNT(*) FROM PORTFOLIOS
+   - Total Assets: SELECT COUNT(*) FROM ASSETS
+   - Total Transactions: SELECT COUNT(*) FROM TRANSACTIONS
+3. Key visualizations:
+   - Bar chart: Client distribution by country
+   - Pie chart: Portfolio status distribution
+   - Line chart: Transaction activity over time
+   - Bar chart: Top asset types by transaction count
+4. Set title to "Executive Summary Dashboard"
+5. Generate as "executive_summary.html" """,
+        "expected_tools": ["analyze_data_for_viz", "create_kpi_card", "create_bar_chart", "create_pie_chart", "create_line_chart", "set_dashboard_title", "generate_dashboard"],
+        "description": "Executive summary across tables"
+    },
+    {
+        "name": "Full Automated Dashboard Pipeline",
+        "agent": "dataviz_agent",
+        "query": """Create a fully automated dashboard for HOLDINGS:
+
+1. List available tables to confirm HOLDINGS exists
+2. Get the schema with visualization suggestions
+3. Analyze the data to create a session
+4. Generate a comprehensive visualization plan
+5. Let the system auto-generate all visualizations from the plan
+6. Export the complete dashboard
+
+This should be done with minimal manual configuration - let the system decide the best visualizations based on the data.""",
+        "expected_tools": ["list_tables_for_viz", "get_table_schema_for_viz", "analyze_data_for_viz", "generate_viz_plan", "generate_dashboard_from_plan"],
+        "description": "Fully automated dashboard creation"
+    },
+]
+
+
 def print_examples():
     """Print all examples in a formatted way."""
 
@@ -2228,6 +2445,9 @@ def print_examples():
         ("📊 EDA SIMPLE", EDA_SIMPLE_EXAMPLES),
         ("📊 EDA MEDIUM", EDA_MEDIUM_EXAMPLES),
         ("📊 EDA COMPLEX", EDA_COMPLEX_EXAMPLES),
+        ("📈 DATAVIZ SIMPLE", DATAVIZ_SIMPLE_EXAMPLES),
+        ("📈 DATAVIZ MEDIUM", DATAVIZ_MEDIUM_EXAMPLES),
+        ("📈 DATAVIZ COMPLEX", DATAVIZ_COMPLEX_EXAMPLES),
     ]
 
     for category_name, examples in all_categories:
@@ -2278,7 +2498,10 @@ def get_example_by_name(name: str) -> dict:
         SYNTH_SEED_COMPLEX_EXAMPLES +
         EDA_SIMPLE_EXAMPLES +
         EDA_MEDIUM_EXAMPLES +
-        EDA_COMPLEX_EXAMPLES
+        EDA_COMPLEX_EXAMPLES +
+        DATAVIZ_SIMPLE_EXAMPLES +
+        DATAVIZ_MEDIUM_EXAMPLES +
+        DATAVIZ_COMPLEX_EXAMPLES
     )
 
     for example in all_examples:
@@ -2322,7 +2545,10 @@ def get_examples_by_agent(agent_name: str) -> list:
         SYNTH_SEED_COMPLEX_EXAMPLES +
         EDA_SIMPLE_EXAMPLES +
         EDA_MEDIUM_EXAMPLES +
-        EDA_COMPLEX_EXAMPLES
+        EDA_COMPLEX_EXAMPLES +
+        DATAVIZ_SIMPLE_EXAMPLES +
+        DATAVIZ_MEDIUM_EXAMPLES +
+        DATAVIZ_COMPLEX_EXAMPLES
     )
 
     return [ex for ex in all_examples if ex['agent'] == agent_name]
@@ -2363,7 +2589,10 @@ def get_examples_by_tool(tool_name: str) -> list:
         SYNTH_SEED_COMPLEX_EXAMPLES +
         EDA_SIMPLE_EXAMPLES +
         EDA_MEDIUM_EXAMPLES +
-        EDA_COMPLEX_EXAMPLES
+        EDA_COMPLEX_EXAMPLES +
+        DATAVIZ_SIMPLE_EXAMPLES +
+        DATAVIZ_MEDIUM_EXAMPLES +
+        DATAVIZ_COMPLEX_EXAMPLES
     )
 
     return [ex for ex in all_examples if tool_name in ex['expected_tools']]

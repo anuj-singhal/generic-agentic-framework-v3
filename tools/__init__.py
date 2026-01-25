@@ -8,6 +8,7 @@ from tools.rag_tools import get_rag_tools
 from tools.multi_data_agent_tools import get_all_multi_data_agent_tools
 from tools.synthetic_data_tools import get_synthetic_data_tools
 from tools.eda_tools import get_eda_tools
+from tools.dataviz_tools import get_dataviz_tools
 
 __all__ = [
     "get_all_tools",
@@ -17,5 +18,6 @@ __all__ = [
     "get_rag_tools",
     "get_all_multi_data_agent_tools",
     "get_synthetic_data_tools",
-    "get_eda_tools"
+    "get_eda_tools",
+    "get_dataviz_tools"
 ]
