@@ -1,9 +1,18 @@
 """
-Data Visualization Tools Module
-===============================
+Data Visualization Tools Module - Professional Edition
+======================================================
 
-Comprehensive data visualization tools for creating dashboards from DuckDB data.
-Uses Plotly for interactive charts and generates HTML dashboards.
+Comprehensive data visualization tools for creating professional, interactive
+dashboards from DuckDB data. Uses Plotly for charts and generates beautiful
+HTML dashboards with dark/light themes.
+
+Features:
+- 25+ visualization tools
+- Professional KPI cards with trends and sparklines
+- Multiple chart types (bar, line, pie, donut, area, scatter, heatmap, treemap, gauge)
+- Dark and light theme support
+- Automatic visualization planning based on data analysis
+- Data table always at the end of dashboard
 """
 
 from langchain_core.tools import tool
@@ -50,6 +59,97 @@ _viz_sessions: Dict[str, Dict[str, Any]] = {}
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 
+# =============================================================================
+# COLOR PALETTES AND THEMES
+# =============================================================================
+
+# Professional color palettes
+COLOR_PALETTES = {
+    "vibrant": [
+        "#00D4AA",  # Teal
+        "#FF6B6B",  # Coral
+        "#4ECDC4",  # Turquoise
+        "#FFE66D",  # Yellow
+        "#95E1D3",  # Mint
+        "#F38181",  # Salmon
+        "#AA96DA",  # Lavender
+        "#FCBAD3",  # Pink
+        "#A8D8EA",  # Light Blue
+        "#FF9F43",  # Orange
+    ],
+    "corporate": [
+        "#2E86AB",  # Blue
+        "#A23B72",  # Magenta
+        "#F18F01",  # Orange
+        "#C73E1D",  # Red
+        "#95C623",  # Green
+        "#5D5179",  # Purple
+        "#0A2463",  # Navy
+        "#FB3640",  # Coral
+        "#1E3888",  # Dark Blue
+        "#47A8BD",  # Cyan
+    ],
+    "modern": [
+        "#6C5CE7",  # Purple
+        "#00CEC9",  # Teal
+        "#FF7675",  # Coral
+        "#FDCB6E",  # Yellow
+        "#74B9FF",  # Blue
+        "#55EFC4",  # Mint
+        "#E17055",  # Orange
+        "#81ECEC",  # Cyan
+        "#A29BFE",  # Lavender
+        "#FD79A8",  # Pink
+    ],
+    "dark_friendly": [
+        "#00F5D4",  # Bright Teal
+        "#FEE440",  # Bright Yellow
+        "#F15BB5",  # Bright Pink
+        "#9B5DE5",  # Purple
+        "#00BBF9",  # Bright Blue
+        "#00F5A0",  # Bright Green
+        "#FF6F61",  # Coral
+        "#FFD93D",  # Gold
+        "#6BCB77",  # Green
+        "#4D96FF",  # Blue
+    ]
+}
+
+# KPI Card colors (for individual cards)
+KPI_COLORS = {
+    "green": {"bg": "#10B981", "light": "#D1FAE5", "dark": "#065F46"},
+    "blue": {"bg": "#3B82F6", "light": "#DBEAFE", "dark": "#1E40AF"},
+    "purple": {"bg": "#8B5CF6", "light": "#EDE9FE", "dark": "#5B21B6"},
+    "orange": {"bg": "#F59E0B", "light": "#FEF3C7", "dark": "#B45309"},
+    "red": {"bg": "#EF4444", "light": "#FEE2E2", "dark": "#B91C1C"},
+    "teal": {"bg": "#14B8A6", "light": "#CCFBF1", "dark": "#0F766E"},
+    "pink": {"bg": "#EC4899", "light": "#FCE7F3", "dark": "#BE185D"},
+    "indigo": {"bg": "#6366F1", "light": "#E0E7FF", "dark": "#4338CA"},
+}
+
+# Theme configurations
+THEMES = {
+    "dark": {
+        "bg_color": "#0F172A",
+        "card_bg": "#1E293B",
+        "text_color": "#F1F5F9",
+        "text_secondary": "#94A3B8",
+        "border_color": "#334155",
+        "grid_color": "#334155",
+        "chart_bg": "rgba(30, 41, 59, 0.8)",
+    },
+    "light": {
+        "bg_color": "#F8FAFC",
+        "card_bg": "#FFFFFF",
+        "text_color": "#1E293B",
+        "text_secondary": "#64748B",
+        "border_color": "#E2E8F0",
+        "grid_color": "#E2E8F0",
+        "chart_bg": "rgba(255, 255, 255, 0.9)",
+    }
+}
+
+
 @contextmanager
 def get_connection(read_only: bool = True):
     """Get a DuckDB connection with automatic cleanup."""
@@ -82,7 +182,9 @@ def _create_session(table_name: str) -> str:
         "data_cache": {},
         "viz_plan": None,
         "dashboard_title": f"{table_name} Dashboard",
-        "dashboard_generated": False
+        "dashboard_generated": False,
+        "theme": "dark",  # Default to dark theme for professional look
+        "color_palette": "dark_friendly"
     }
     return session_id
 
@@ -105,20 +207,45 @@ def _safe_json_serialize(obj):
         return obj
 
 
-def _get_color_palette():
-    """Get a professional color palette for visualizations."""
-    return [
-        "#2E86AB",  # Blue
-        "#A23B72",  # Magenta
-        "#F18F01",  # Orange
-        "#C73E1D",  # Red
-        "#3B1F2B",  # Dark purple
-        "#95C623",  # Green
-        "#5D5179",  # Purple
-        "#F4D35E",  # Yellow
-        "#0A2463",  # Navy
-        "#FB3640",  # Coral
-    ]
+def _get_color_palette(palette_name: str = "dark_friendly") -> List[str]:
+    """Get a color palette by name."""
+    return COLOR_PALETTES.get(palette_name, COLOR_PALETTES["dark_friendly"])
+
+
+def _format_number(value, format_type: str = "number") -> str:
+    """Format a number for display."""
+    if value is None:
+        return "N/A"
+
+    try:
+        value = float(value)
+        if format_type == "currency":
+            if abs(value) >= 1_000_000_000:
+                return f"${value/1_000_000_000:.2f}B"
+            elif abs(value) >= 1_000_000:
+                return f"${value/1_000_000:.2f}M"
+            elif abs(value) >= 1_000:
+                return f"${value/1_000:.1f}K"
+            else:
+                return f"${value:,.2f}"
+        elif format_type == "percentage":
+            return f"{value:.1f}%"
+        elif format_type == "compact":
+            if abs(value) >= 1_000_000_000:
+                return f"{value/1_000_000_000:.2f}B"
+            elif abs(value) >= 1_000_000:
+                return f"{value/1_000_000:.2f}M"
+            elif abs(value) >= 1_000:
+                return f"{value/1_000:.1f}K"
+            else:
+                return f"{value:,.0f}"
+        else:
+            if isinstance(value, float) and value != int(value):
+                return f"{value:,.2f}"
+            else:
+                return f"{int(value):,}"
+    except:
+        return str(value)
 
 
 # =============================================================================
@@ -218,7 +345,7 @@ def get_table_schema_for_viz(table_name: str) -> str:
                 # Determine visualization types
                 viz_suggestions = []
                 if any(t in col_type for t in ["INT", "FLOAT", "DOUBLE", "DECIMAL"]):
-                    viz_suggestions = ["histogram", "box_plot", "kpi_card", "line_chart", "scatter_plot"]
+                    viz_suggestions = ["histogram", "box_plot", "kpi_card", "line_chart", "scatter_plot", "gauge", "area_chart"]
                     col_class = "numeric"
                 elif any(t in col_type for t in ["DATE", "TIME", "TIMESTAMP"]):
                     viz_suggestions = ["line_chart", "area_chart", "timeline"]
@@ -226,9 +353,9 @@ def get_table_schema_for_viz(table_name: str) -> str:
                 else:
                     unique_count = conn.execute(f"SELECT COUNT(DISTINCT {col_name}) FROM {table_name}").fetchone()[0]
                     if unique_count <= 15:
-                        viz_suggestions = ["bar_chart", "pie_chart", "donut_chart"]
+                        viz_suggestions = ["bar_chart", "pie_chart", "donut_chart", "horizontal_bar", "treemap"]
                     else:
-                        viz_suggestions = ["bar_chart", "word_cloud", "treemap"]
+                        viz_suggestions = ["bar_chart", "horizontal_bar", "treemap"]
                     col_class = "categorical"
 
                 columns.append({
@@ -248,7 +375,7 @@ def get_table_schema_for_viz(table_name: str) -> str:
                     "charts": [
                         {"type": "bar_chart", "columns": [c["name"] for c in columns if c["classification"] == "categorical"][:2]},
                         {"type": "line_chart", "columns": [c["name"] for c in columns if c["classification"] == "datetime"]},
-                        {"type": "pie_chart", "columns": [c["name"] for c in columns if c["classification"] == "categorical"][:1]}
+                        {"type": "donut_chart", "columns": [c["name"] for c in columns if c["classification"] == "categorical"][:1]}
                     ]
                 }
             }, indent=2, default=str)
@@ -330,14 +457,14 @@ def load_schema_relationships(schema_file: Optional[str] = None) -> str:
 def analyze_data_for_viz(table_name: str, session_id: Optional[str] = None) -> str:
     """
     Analyze a table's data to determine the best visualizations.
-    Creates a visualization session and returns analysis with recommendations.
+    Creates a visualization session and returns comprehensive analysis with recommendations.
 
     Args:
         table_name: Name of the table to analyze
         session_id: Optional existing session ID
 
     Returns:
-        Data analysis with visualization recommendations
+        Data analysis with visualization recommendations for a complete dashboard
     """
     try:
         table_name = table_name.upper().strip()
@@ -366,7 +493,8 @@ def analyze_data_for_viz(table_name: str, session_id: Optional[str] = None) -> s
                 "columns_analysis": [],
                 "suggested_kpis": [],
                 "suggested_charts": [],
-                "suggested_aggregations": []
+                "suggested_aggregations": [],
+                "data_story": ""
             }
 
             numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
@@ -389,12 +517,14 @@ def analyze_data_for_viz(table_name: str, session_id: Optional[str] = None) -> s
                         "min": _safe_json_serialize(df[col].min()),
                         "max": _safe_json_serialize(df[col].max()),
                         "mean": _safe_json_serialize(df[col].mean()),
-                        "sum": _safe_json_serialize(df[col].sum())
+                        "sum": _safe_json_serialize(df[col].sum()),
+                        "median": _safe_json_serialize(df[col].median())
                     }
                     # Suggest KPIs for numeric columns
                     analysis["suggested_kpis"].append({
                         "column": col,
-                        "metrics": ["sum", "avg", "min", "max", "count"]
+                        "metrics": ["sum", "avg", "min", "max", "count"],
+                        "suggested_format": "currency" if any(x in col.lower() for x in ["amount", "price", "value", "cost", "revenue", "profit"]) else "number"
                     })
                 elif col in datetime_cols:
                     col_analysis["type"] = "datetime"
@@ -409,11 +539,18 @@ def analyze_data_for_viz(table_name: str, session_id: Optional[str] = None) -> s
 
                 analysis["columns_analysis"].append(col_analysis)
 
-            # Generate chart suggestions
-            # Bar charts for categorical with numeric
-            for cat_col in categorical_cols[:3]:
+            # Generate comprehensive chart suggestions
+            kpi_colors = list(KPI_COLORS.keys())
+            color_idx = 0
+
+            # KPI suggestions with colors
+            for i, kpi in enumerate(analysis["suggested_kpis"][:6]):
+                kpi["color"] = kpi_colors[i % len(kpi_colors)]
+
+            # Bar charts for categorical with numeric (vertical and horizontal)
+            for cat_col in categorical_cols[:4]:
                 if df[cat_col].nunique() <= 15:
-                    for num_col in numeric_cols[:2]:
+                    for num_col in numeric_cols[:3]:
                         analysis["suggested_charts"].append({
                             "type": "bar_chart",
                             "title": f"{num_col} by {cat_col}",
@@ -421,28 +558,44 @@ def analyze_data_for_viz(table_name: str, session_id: Optional[str] = None) -> s
                             "y_column": num_col,
                             "aggregation": "sum"
                         })
+                        # Add horizontal bar for variety
+                        if df[cat_col].nunique() >= 5:
+                            analysis["suggested_charts"].append({
+                                "type": "horizontal_bar",
+                                "title": f"Top {cat_col} by {num_col}",
+                                "x_column": num_col,
+                                "y_column": cat_col,
+                                "aggregation": "sum"
+                            })
 
-            # Pie charts for categorical distribution
-            for cat_col in categorical_cols[:2]:
-                if df[cat_col].nunique() <= 10:
+            # Donut/Pie charts for categorical distribution
+            for cat_col in categorical_cols[:3]:
+                if 2 <= df[cat_col].nunique() <= 10:
                     analysis["suggested_charts"].append({
-                        "type": "pie_chart",
+                        "type": "donut_chart",
                         "title": f"{cat_col} Distribution",
                         "column": cat_col
                     })
 
             # Line charts for time series
             for dt_col in datetime_cols:
-                for num_col in numeric_cols[:2]:
+                for num_col in numeric_cols[:3]:
                     analysis["suggested_charts"].append({
                         "type": "line_chart",
                         "title": f"{num_col} over Time",
                         "x_column": dt_col,
                         "y_column": num_col
                     })
+                    # Add area chart variant
+                    analysis["suggested_charts"].append({
+                        "type": "area_chart",
+                        "title": f"{num_col} Trend",
+                        "x_column": dt_col,
+                        "y_column": num_col
+                    })
 
             # Histograms for numeric distribution
-            for num_col in numeric_cols[:3]:
+            for num_col in numeric_cols[:4]:
                 analysis["suggested_charts"].append({
                     "type": "histogram",
                     "title": f"{num_col} Distribution",
@@ -451,21 +604,64 @@ def analyze_data_for_viz(table_name: str, session_id: Optional[str] = None) -> s
 
             # Scatter plots for numeric correlations
             if len(numeric_cols) >= 2:
+                for i in range(min(len(numeric_cols)-1, 2)):
+                    analysis["suggested_charts"].append({
+                        "type": "scatter_plot",
+                        "title": f"{numeric_cols[i]} vs {numeric_cols[i+1]}",
+                        "x_column": numeric_cols[i],
+                        "y_column": numeric_cols[i+1]
+                    })
+
+            # Stacked bar for multiple categories
+            if len(categorical_cols) >= 2 and len(numeric_cols) >= 1:
                 analysis["suggested_charts"].append({
-                    "type": "scatter_plot",
-                    "title": f"{numeric_cols[0]} vs {numeric_cols[1]}",
-                    "x_column": numeric_cols[0],
-                    "y_column": numeric_cols[1]
+                    "type": "stacked_bar",
+                    "title": f"{numeric_cols[0]} by {categorical_cols[0]} and {categorical_cols[1]}",
+                    "x_column": categorical_cols[0],
+                    "y_column": numeric_cols[0],
+                    "color_column": categorical_cols[1]
+                })
+
+            # Treemap for hierarchical data
+            for cat_col in categorical_cols[:2]:
+                if 3 <= df[cat_col].nunique() <= 20 and len(numeric_cols) > 0:
+                    analysis["suggested_charts"].append({
+                        "type": "treemap",
+                        "title": f"{cat_col} Breakdown",
+                        "labels_column": cat_col,
+                        "values_column": numeric_cols[0]
+                    })
+
+            # Gauge charts for key metrics
+            if len(numeric_cols) >= 1:
+                analysis["suggested_charts"].append({
+                    "type": "gauge",
+                    "title": f"Average {numeric_cols[0]}",
+                    "column": numeric_cols[0],
+                    "metric": "avg"
                 })
 
             # Suggested aggregations
-            for cat_col in categorical_cols[:2]:
-                for num_col in numeric_cols[:2]:
+            for cat_col in categorical_cols[:3]:
+                for num_col in numeric_cols[:3]:
                     analysis["suggested_aggregations"].append({
                         "group_by": cat_col,
                         "metric": num_col,
-                        "functions": ["SUM", "AVG", "COUNT"]
+                        "functions": ["SUM", "AVG", "COUNT", "MIN", "MAX"]
                     })
+
+            # Generate data story
+            analysis["data_story"] = f"""
+This dataset contains {len(df):,} records with {len(df.columns)} columns.
+- Numeric columns ({len(numeric_cols)}): {', '.join(numeric_cols[:5])}{'...' if len(numeric_cols) > 5 else ''}
+- Categorical columns ({len(categorical_cols)}): {', '.join(categorical_cols[:5])}{'...' if len(categorical_cols) > 5 else ''}
+- Date/Time columns ({len(datetime_cols)}): {', '.join(datetime_cols[:3])}
+
+Recommended dashboard should include:
+1. {min(6, len(analysis['suggested_kpis']))} KPI cards showing key metrics
+2. {min(8, len(analysis['suggested_charts']))} visualizations covering distributions, comparisons, and trends
+3. Data table at the end for detailed exploration
+"""
 
             _viz_sessions[session_id]["analysis"] = analysis
 
@@ -476,17 +672,18 @@ def analyze_data_for_viz(table_name: str, session_id: Optional[str] = None) -> s
 
 
 @tool
-def generate_viz_plan(session_id: str, dashboard_title: Optional[str] = None) -> str:
+def generate_viz_plan(session_id: str, dashboard_title: Optional[str] = None, theme: str = "dark") -> str:
     """
-    Generate a comprehensive visualization plan for the dashboard.
-    This creates a structured plan with all charts, KPIs, and layout.
+    Generate a comprehensive visualization plan for a professional dashboard.
+    This creates a structured plan with KPIs, charts, and layout optimized to tell the complete data story.
 
     Args:
         session_id: Visualization session ID
         dashboard_title: Optional custom title for the dashboard
+        theme: 'dark' for professional dark theme (default), 'light' for light theme
 
     Returns:
-        Detailed visualization plan with SQL queries
+        Detailed visualization plan with SQL queries and layout
     """
     try:
         if session_id not in _viz_sessions:
@@ -499,33 +696,46 @@ def generate_viz_plan(session_id: str, dashboard_title: Optional[str] = None) ->
         if dashboard_title:
             session["dashboard_title"] = dashboard_title
 
+        session["theme"] = theme
+        session["color_palette"] = "dark_friendly" if theme == "dark" else "corporate"
+
         # Generate visualization plan
         plan = {
             "session_id": session_id,
             "dashboard_title": session["dashboard_title"],
             "table_name": table_name,
+            "theme": theme,
             "layout": {
                 "sections": []
             },
             "kpis": [],
-            "visualizations": []
+            "visualizations": [],
+            "data_table": None
         }
 
-        # KPI Section
+        kpi_colors = list(KPI_COLORS.keys())
+
+        # KPI Section - Up to 6 KPIs
         kpi_section = {
-            "title": "Key Metrics",
+            "title": "Key Performance Indicators",
             "type": "kpi_row",
             "items": []
         }
 
-        suggested_kpis = analysis.get("suggested_kpis", [])[:4]
+        suggested_kpis = analysis.get("suggested_kpis", [])[:6]
         for i, kpi in enumerate(suggested_kpis):
             col = kpi["column"]
+            color = kpi_colors[i % len(kpi_colors)]
+            format_type = kpi.get("suggested_format", "number")
+
+            # Create multiple KPI metrics per column
             kpi_item = {
                 "id": f"kpi_{i+1}",
-                "title": f"Total {col}",
+                "title": f"Total {col.replace('_', ' ').title()}",
                 "sql": f"SELECT SUM({col}) as value FROM {table_name}",
-                "format": "number"
+                "format": format_type,
+                "color": color,
+                "icon": "chart-line"
             }
             kpi_section["items"].append(kpi_item)
             plan["kpis"].append(kpi_item)
@@ -535,19 +745,49 @@ def generate_viz_plan(session_id: str, dashboard_title: Optional[str] = None) ->
             "id": "kpi_count",
             "title": "Total Records",
             "sql": f"SELECT COUNT(*) as value FROM {table_name}",
-            "format": "number"
+            "format": "compact",
+            "color": "teal",
+            "icon": "database"
         })
+        plan["kpis"].append(kpi_section["items"][-1])
+
+        # Add unique count KPIs for important categorical columns
+        cat_cols = [c for c in analysis.get("columns_analysis", []) if c.get("type") == "categorical"]
+        for i, cat_col in enumerate(cat_cols[:2]):
+            kpi_section["items"].append({
+                "id": f"kpi_unique_{i+1}",
+                "title": f"Unique {cat_col['name'].replace('_', ' ').title()}",
+                "sql": f"SELECT COUNT(DISTINCT {cat_col['name']}) as value FROM {table_name}",
+                "format": "compact",
+                "color": kpi_colors[(len(suggested_kpis) + i + 1) % len(kpi_colors)],
+                "icon": "users"
+            })
+            plan["kpis"].append(kpi_section["items"][-1])
+
         plan["layout"]["sections"].append(kpi_section)
 
-        # Charts Section
+        # Charts Section - Select best charts to tell the story
         chart_section = {
-            "title": "Charts",
+            "title": "Analytics & Insights",
             "type": "chart_grid",
             "items": []
         }
 
-        suggested_charts = analysis.get("suggested_charts", [])[:8]
-        for i, chart in enumerate(suggested_charts):
+        suggested_charts = analysis.get("suggested_charts", [])
+
+        # Select diverse chart types (max 10 charts)
+        selected_charts = []
+        chart_type_count = {}
+
+        for chart in suggested_charts:
+            chart_type = chart["type"]
+            if chart_type_count.get(chart_type, 0) < 2:  # Max 2 of each type
+                selected_charts.append(chart)
+                chart_type_count[chart_type] = chart_type_count.get(chart_type, 0) + 1
+                if len(selected_charts) >= 10:
+                    break
+
+        for i, chart in enumerate(selected_charts):
             viz_item = {
                 "id": f"chart_{i+1}",
                 "type": chart["type"],
@@ -563,12 +803,20 @@ def generate_viz_plan(session_id: str, dashboard_title: Optional[str] = None) ->
                 viz_item["x_column"] = x_col
                 viz_item["y_column"] = y_col
 
-            elif chart["type"] == "pie_chart":
+            elif chart["type"] == "horizontal_bar":
+                x_col = chart.get("x_column")
+                y_col = chart.get("y_column")
+                agg = chart.get("aggregation", "SUM")
+                viz_item["sql"] = f"SELECT {y_col}, {agg}({x_col}) as {x_col} FROM {table_name} GROUP BY {y_col} ORDER BY {agg}({x_col}) DESC LIMIT 10"
+                viz_item["x_column"] = x_col
+                viz_item["y_column"] = y_col
+
+            elif chart["type"] in ["pie_chart", "donut_chart"]:
                 col = chart.get("column")
                 viz_item["sql"] = f"SELECT {col}, COUNT(*) as count FROM {table_name} GROUP BY {col} ORDER BY count DESC LIMIT 10"
                 viz_item["column"] = col
 
-            elif chart["type"] == "line_chart":
+            elif chart["type"] in ["line_chart", "area_chart"]:
                 x_col = chart.get("x_column")
                 y_col = chart.get("y_column")
                 viz_item["sql"] = f"SELECT {x_col}, SUM({y_col}) as {y_col} FROM {table_name} GROUP BY {x_col} ORDER BY {x_col}"
@@ -587,18 +835,44 @@ def generate_viz_plan(session_id: str, dashboard_title: Optional[str] = None) ->
                 viz_item["x_column"] = x_col
                 viz_item["y_column"] = y_col
 
+            elif chart["type"] == "stacked_bar":
+                x_col = chart.get("x_column")
+                y_col = chart.get("y_column")
+                color_col = chart.get("color_column")
+                viz_item["sql"] = f"SELECT {x_col}, {color_col}, SUM({y_col}) as {y_col} FROM {table_name} GROUP BY {x_col}, {color_col} ORDER BY {x_col}"
+                viz_item["x_column"] = x_col
+                viz_item["y_column"] = y_col
+                viz_item["color_column"] = color_col
+
+            elif chart["type"] == "treemap":
+                labels_col = chart.get("labels_column")
+                values_col = chart.get("values_column")
+                viz_item["sql"] = f"SELECT {labels_col}, SUM({values_col}) as {values_col} FROM {table_name} GROUP BY {labels_col} ORDER BY SUM({values_col}) DESC LIMIT 15"
+                viz_item["labels_column"] = labels_col
+                viz_item["values_column"] = values_col
+
+            elif chart["type"] == "gauge":
+                col = chart.get("column")
+                metric = chart.get("metric", "avg")
+                if metric == "avg":
+                    viz_item["sql"] = f"SELECT AVG({col}) as value, MIN({col}) as min_val, MAX({col}) as max_val FROM {table_name}"
+                else:
+                    viz_item["sql"] = f"SELECT SUM({col}) as value FROM {table_name}"
+                viz_item["column"] = col
+
             chart_section["items"].append(viz_item)
             plan["visualizations"].append(viz_item)
 
         plan["layout"]["sections"].append(chart_section)
 
-        # Data Table Section
+        # Data Table Section - ALWAYS at the end
         table_section = {
-            "title": "Data Preview",
+            "title": "Data Details",
             "type": "data_table",
             "sql": f"SELECT * FROM {table_name} LIMIT 100"
         }
         plan["layout"]["sections"].append(table_section)
+        plan["data_table"] = table_section
 
         session["viz_plan"] = plan
 
@@ -606,6 +880,45 @@ def generate_viz_plan(session_id: str, dashboard_title: Optional[str] = None) ->
 
     except Exception as e:
         return f"Error generating plan: {str(e)}"
+
+
+@tool
+def set_dashboard_theme(session_id: str, theme: str = "dark", color_palette: str = "dark_friendly") -> str:
+    """
+    Set the theme and color palette for the dashboard.
+
+    Args:
+        session_id: Visualization session ID
+        theme: 'dark' for professional dark theme, 'light' for light theme
+        color_palette: Color palette name ('vibrant', 'corporate', 'modern', 'dark_friendly')
+
+    Returns:
+        Confirmation of theme settings
+    """
+    try:
+        if session_id not in _viz_sessions:
+            return f"Error: Session '{session_id}' not found."
+
+        if theme not in THEMES:
+            return f"Error: Invalid theme. Choose from: {list(THEMES.keys())}"
+
+        if color_palette not in COLOR_PALETTES:
+            return f"Error: Invalid palette. Choose from: {list(COLOR_PALETTES.keys())}"
+
+        _viz_sessions[session_id]["theme"] = theme
+        _viz_sessions[session_id]["color_palette"] = color_palette
+
+        return json.dumps({
+            "status": "success",
+            "session_id": session_id,
+            "theme": theme,
+            "color_palette": color_palette,
+            "theme_colors": THEMES[theme],
+            "palette_colors": COLOR_PALETTES[color_palette][:5]
+        }, indent=2)
+
+    except Exception as e:
+        return f"Error setting theme: {str(e)}"
 
 
 # =============================================================================
@@ -706,18 +1019,17 @@ def collect_all_viz_data(session_id: str) -> str:
                     errors.append({"id": viz["id"], "error": str(e)})
 
             # Collect table data
-            for section in plan.get("layout", {}).get("sections", []):
-                if section.get("type") == "data_table" and section.get("sql"):
-                    try:
-                        df = conn.execute(section["sql"]).fetchdf()
-                        session["data_cache"]["data_table"] = df
-                        collected.append({
-                            "id": "data_table",
-                            "type": "table",
-                            "rows": len(df)
-                        })
-                    except Exception as e:
-                        errors.append({"id": "data_table", "error": str(e)})
+            if plan.get("data_table") and plan["data_table"].get("sql"):
+                try:
+                    df = conn.execute(plan["data_table"]["sql"]).fetchdf()
+                    session["data_cache"]["data_table"] = df
+                    collected.append({
+                        "id": "data_table",
+                        "type": "table",
+                        "rows": len(df)
+                    })
+                except Exception as e:
+                    errors.append({"id": "data_table", "error": str(e)})
 
         return json.dumps({
             "session_id": session_id,
@@ -761,10 +1073,12 @@ def create_bar_chart(session_id: str, title: str, sql: str, x_column: str, y_col
         if session_id not in _viz_sessions:
             return f"Error: Session '{session_id}' not found."
 
+        session = _viz_sessions[session_id]
         with get_connection() as conn:
             df = conn.execute(sql).fetchdf()
 
-        colors = _get_color_palette()
+        colors = _get_color_palette(session.get("color_palette", "dark_friendly"))
+        theme = THEMES.get(session.get("theme", "dark"))
 
         if orientation == "h":
             fig = px.bar(df, y=x_column, x=y_column, orientation='h',
@@ -776,13 +1090,17 @@ def create_bar_chart(session_id: str, title: str, sql: str, x_column: str, y_col
                         color_discrete_sequence=colors)
 
         fig.update_layout(
-            template="plotly_white",
-            title_font_size=16,
+            template="plotly_dark" if session.get("theme") == "dark" else "plotly_white",
+            title_font_size=18,
+            title_font_color=theme["text_color"],
+            paper_bgcolor=theme["chart_bg"],
+            plot_bgcolor=theme["chart_bg"],
+            font=dict(color=theme["text_color"]),
             showlegend=True if color_column else False
         )
 
-        chart_id = f"bar_{len(_viz_sessions[session_id]['visualizations']) + 1}"
-        _viz_sessions[session_id]["visualizations"].append({
+        chart_id = f"bar_{len(session['visualizations']) + 1}"
+        session["visualizations"].append({
             "id": chart_id,
             "type": "bar_chart",
             "title": title,
@@ -826,10 +1144,12 @@ def create_line_chart(session_id: str, title: str, sql: str, x_column: str, y_co
         if session_id not in _viz_sessions:
             return f"Error: Session '{session_id}' not found."
 
+        session = _viz_sessions[session_id]
         with get_connection() as conn:
             df = conn.execute(sql).fetchdf()
 
-        colors = _get_color_palette()
+        colors = _get_color_palette(session.get("color_palette", "dark_friendly"))
+        theme = THEMES.get(session.get("theme", "dark"))
 
         fig = px.line(df, x=x_column, y=y_column, title=title,
                      color=color_column if color_column else None,
@@ -837,12 +1157,16 @@ def create_line_chart(session_id: str, title: str, sql: str, x_column: str, y_co
                      markers=True)
 
         fig.update_layout(
-            template="plotly_white",
-            title_font_size=16
+            template="plotly_dark" if session.get("theme") == "dark" else "plotly_white",
+            title_font_size=18,
+            title_font_color=theme["text_color"],
+            paper_bgcolor=theme["chart_bg"],
+            plot_bgcolor=theme["chart_bg"],
+            font=dict(color=theme["text_color"])
         )
 
-        chart_id = f"line_{len(_viz_sessions[session_id]['visualizations']) + 1}"
-        _viz_sessions[session_id]["visualizations"].append({
+        chart_id = f"line_{len(session['visualizations']) + 1}"
+        session["visualizations"].append({
             "id": chart_id,
             "type": "line_chart",
             "title": title,
@@ -863,18 +1187,19 @@ def create_line_chart(session_id: str, title: str, sql: str, x_column: str, y_co
 
 
 @tool
-def create_pie_chart(session_id: str, title: str, sql: str, names_column: str, values_column: str,
-                     hole: float = 0.0) -> str:
+def create_area_chart(session_id: str, title: str, sql: str, x_column: str, y_column: str,
+                      color_column: Optional[str] = None, stacked: bool = False) -> str:
     """
-    Create a pie chart or donut chart visualization.
+    Create an area chart visualization with fill.
 
     Args:
         session_id: Visualization session ID
         title: Chart title
         sql: SQL query for data
-        names_column: Column for slice names
-        values_column: Column for slice values
-        hole: Size of hole for donut chart (0-0.9, 0 for pie)
+        x_column: Column for X axis
+        y_column: Column for Y axis
+        color_column: Optional column for multiple areas
+        stacked: Whether to stack areas (default False)
 
     Returns:
         Confirmation with chart ID
@@ -886,22 +1211,104 @@ def create_pie_chart(session_id: str, title: str, sql: str, names_column: str, v
         if session_id not in _viz_sessions:
             return f"Error: Session '{session_id}' not found."
 
+        session = _viz_sessions[session_id]
         with get_connection() as conn:
             df = conn.execute(sql).fetchdf()
 
-        colors = _get_color_palette()
+        colors = _get_color_palette(session.get("color_palette", "dark_friendly"))
+        theme = THEMES.get(session.get("theme", "dark"))
+
+        fig = px.area(df, x=x_column, y=y_column, title=title,
+                     color=color_column if color_column else None,
+                     color_discrete_sequence=colors,
+                     line_group=color_column if color_column else None)
+
+        if stacked:
+            fig.update_traces(stackgroup='one')
+
+        fig.update_layout(
+            template="plotly_dark" if session.get("theme") == "dark" else "plotly_white",
+            title_font_size=18,
+            title_font_color=theme["text_color"],
+            paper_bgcolor=theme["chart_bg"],
+            plot_bgcolor=theme["chart_bg"],
+            font=dict(color=theme["text_color"])
+        )
+
+        chart_id = f"area_{len(session['visualizations']) + 1}"
+        session["visualizations"].append({
+            "id": chart_id,
+            "type": "area_chart",
+            "title": title,
+            "figure": fig,
+            "data": df.to_dict(orient="records")
+        })
+
+        return json.dumps({
+            "status": "success",
+            "chart_id": chart_id,
+            "type": "area_chart",
+            "title": title,
+            "data_rows": len(df)
+        }, indent=2)
+
+    except Exception as e:
+        return f"Error creating area chart: {str(e)}"
+
+
+@tool
+def create_pie_chart(session_id: str, title: str, sql: str, names_column: str, values_column: str,
+                     hole: float = 0.0) -> str:
+    """
+    Create a pie chart or donut chart visualization.
+
+    Args:
+        session_id: Visualization session ID
+        title: Chart title
+        sql: SQL query for data
+        names_column: Column for slice names
+        values_column: Column for slice values
+        hole: Size of hole for donut chart (0-0.9, 0 for pie, 0.4+ for donut)
+
+    Returns:
+        Confirmation with chart ID
+    """
+    try:
+        if not PLOTLY_AVAILABLE:
+            return "Error: Plotly not installed."
+
+        if session_id not in _viz_sessions:
+            return f"Error: Session '{session_id}' not found."
+
+        session = _viz_sessions[session_id]
+        with get_connection() as conn:
+            df = conn.execute(sql).fetchdf()
+
+        colors = _get_color_palette(session.get("color_palette", "dark_friendly"))
+        theme = THEMES.get(session.get("theme", "dark"))
 
         fig = px.pie(df, names=names_column, values=values_column, title=title,
                     color_discrete_sequence=colors, hole=hole)
 
+        fig.update_traces(
+            textposition='inside',
+            textinfo='percent+label',
+            textfont_size=12
+        )
+
         fig.update_layout(
-            template="plotly_white",
-            title_font_size=16
+            template="plotly_dark" if session.get("theme") == "dark" else "plotly_white",
+            title_font_size=18,
+            title_font_color=theme["text_color"],
+            paper_bgcolor=theme["chart_bg"],
+            font=dict(color=theme["text_color"]),
+            showlegend=True,
+            legend=dict(font=dict(color=theme["text_color"]))
         )
 
         chart_type = "donut_chart" if hole > 0 else "pie_chart"
-        chart_id = f"pie_{len(_viz_sessions[session_id]['visualizations']) + 1}"
-        _viz_sessions[session_id]["visualizations"].append({
+        chart_id = f"pie_{len(session['visualizations']) + 1}"
+        session["visualizations"].append({
             "id": chart_id,
             "type": chart_type,
             "title": title,
@@ -919,6 +1326,84 @@ def create_pie_chart(session_id: str, title: str, sql: str, names_column: str, v
 
     except Exception as e:
         return f"Error creating pie chart: {str(e)}"
+
+
+@tool
+def create_donut_chart(session_id: str, title: str, sql: str, names_column: str, values_column: str,
+                       center_text: Optional[str] = None) -> str:
+    """
+    Create a donut chart with optional center text/value.
+
+    Args:
+        session_id: Visualization session ID
+        title: Chart title
+        sql: SQL query for data
+        names_column: Column for slice names
+        values_column: Column for slice values
+        center_text: Optional text to display in center
+
+    Returns:
+        Confirmation with chart ID
+    """
+    try:
+        if not PLOTLY_AVAILABLE:
+            return "Error: Plotly not installed."
+
+        if session_id not in _viz_sessions:
+            return f"Error: Session '{session_id}' not found."
+
+        session = _viz_sessions[session_id]
+        with get_connection() as conn:
+            df = conn.execute(sql).fetchdf()
+
+        colors = _get_color_palette(session.get("color_palette", "dark_friendly"))
+        theme = THEMES.get(session.get("theme", "dark"))
+
+        fig = go.Figure(data=[go.Pie(
+            labels=df[names_column],
+            values=df[values_column],
+            hole=0.5,
+            marker=dict(colors=colors[:len(df)]),
+            textinfo='percent+label',
+            textposition='outside'
+        )])
+
+        # Add center annotation if provided
+        if center_text:
+            fig.add_annotation(
+                text=center_text,
+                x=0.5, y=0.5,
+                font=dict(size=24, color=theme["text_color"]),
+                showarrow=False
+            )
+
+        fig.update_layout(
+            title=dict(text=title, font=dict(size=18, color=theme["text_color"])),
+            paper_bgcolor=theme["chart_bg"],
+            font=dict(color=theme["text_color"]),
+            showlegend=True,
+            legend=dict(font=dict(color=theme["text_color"]))
+        )
+
+        chart_id = f"donut_{len(session['visualizations']) + 1}"
+        session["visualizations"].append({
+            "id": chart_id,
+            "type": "donut_chart",
+            "title": title,
+            "figure": fig,
+            "data": df.to_dict(orient="records")
+        })
+
+        return json.dumps({
+            "status": "success",
+            "chart_id": chart_id,
+            "type": "donut_chart",
+            "title": title,
+            "data_rows": len(df)
+        }, indent=2)
+
+    except Exception as e:
+        return f"Error creating donut chart: {str(e)}"
 
 
 @tool
@@ -943,22 +1428,28 @@ def create_histogram(session_id: str, title: str, sql: str, column: str, nbins: 
         if session_id not in _viz_sessions:
             return f"Error: Session '{session_id}' not found."
 
+        session = _viz_sessions[session_id]
         with get_connection() as conn:
             df = conn.execute(sql).fetchdf()
 
-        colors = _get_color_palette()
+        colors = _get_color_palette(session.get("color_palette", "dark_friendly"))
+        theme = THEMES.get(session.get("theme", "dark"))
 
         fig = px.histogram(df, x=column, title=title, nbins=nbins,
                           color_discrete_sequence=colors)
 
         fig.update_layout(
-            template="plotly_white",
-            title_font_size=16,
+            template="plotly_dark" if session.get("theme") == "dark" else "plotly_white",
+            title_font_size=18,
+            title_font_color=theme["text_color"],
+            paper_bgcolor=theme["chart_bg"],
+            plot_bgcolor=theme["chart_bg"],
+            font=dict(color=theme["text_color"]),
             bargap=0.1
         )
 
-        chart_id = f"hist_{len(_viz_sessions[session_id]['visualizations']) + 1}"
-        _viz_sessions[session_id]["visualizations"].append({
+        chart_id = f"hist_{len(session['visualizations']) + 1}"
+        session["visualizations"].append({
             "id": chart_id,
             "type": "histogram",
             "title": title,
@@ -1003,10 +1494,12 @@ def create_scatter_plot(session_id: str, title: str, sql: str, x_column: str, y_
         if session_id not in _viz_sessions:
             return f"Error: Session '{session_id}' not found."
 
+        session = _viz_sessions[session_id]
         with get_connection() as conn:
             df = conn.execute(sql).fetchdf()
 
-        colors = _get_color_palette()
+        colors = _get_color_palette(session.get("color_palette", "dark_friendly"))
+        theme = THEMES.get(session.get("theme", "dark"))
 
         fig = px.scatter(df, x=x_column, y=y_column, title=title,
                         color=color_column if color_column else None,
@@ -1014,12 +1507,16 @@ def create_scatter_plot(session_id: str, title: str, sql: str, x_column: str, y_
                         color_discrete_sequence=colors)
 
         fig.update_layout(
-            template="plotly_white",
-            title_font_size=16
+            template="plotly_dark" if session.get("theme") == "dark" else "plotly_white",
+            title_font_size=18,
+            title_font_color=theme["text_color"],
+            paper_bgcolor=theme["chart_bg"],
+            plot_bgcolor=theme["chart_bg"],
+            font=dict(color=theme["text_color"])
         )
 
-        chart_id = f"scatter_{len(_viz_sessions[session_id]['visualizations']) + 1}"
-        _viz_sessions[session_id]["visualizations"].append({
+        chart_id = f"scatter_{len(session['visualizations']) + 1}"
+        session["visualizations"].append({
             "id": chart_id,
             "type": "scatter_plot",
             "title": title,
@@ -1063,27 +1560,33 @@ def create_heatmap(session_id: str, title: str, sql: str, x_column: str, y_colum
         if session_id not in _viz_sessions:
             return f"Error: Session '{session_id}' not found."
 
+        session = _viz_sessions[session_id]
+        theme = THEMES.get(session.get("theme", "dark"))
+
         with get_connection() as conn:
             df = conn.execute(sql).fetchdf()
 
         # Pivot data for heatmap
         pivot_df = df.pivot(index=y_column, columns=x_column, values=value_column)
 
+        colorscale = 'Viridis' if session.get("theme") == "dark" else 'Blues'
+
         fig = go.Figure(data=go.Heatmap(
             z=pivot_df.values,
             x=pivot_df.columns.tolist(),
             y=pivot_df.index.tolist(),
-            colorscale='Blues'
+            colorscale=colorscale
         ))
 
         fig.update_layout(
-            title=title,
-            template="plotly_white",
-            title_font_size=16
+            title=dict(text=title, font=dict(size=18, color=theme["text_color"])),
+            paper_bgcolor=theme["chart_bg"],
+            plot_bgcolor=theme["chart_bg"],
+            font=dict(color=theme["text_color"])
         )
 
-        chart_id = f"heatmap_{len(_viz_sessions[session_id]['visualizations']) + 1}"
-        _viz_sessions[session_id]["visualizations"].append({
+        chart_id = f"heatmap_{len(session['visualizations']) + 1}"
+        session["visualizations"].append({
             "id": chart_id,
             "type": "heatmap",
             "title": title,
@@ -1104,19 +1607,246 @@ def create_heatmap(session_id: str, title: str, sql: str, x_column: str, y_colum
 
 
 @tool
-def create_kpi_card(session_id: str, title: str, sql: str, format_type: str = "number",
-                    prefix: str = "", suffix: str = "", comparison_sql: Optional[str] = None) -> str:
+def create_treemap(session_id: str, title: str, sql: str, labels_column: str, values_column: str,
+                   parent_column: Optional[str] = None) -> str:
     """
-    Create a KPI card with a metric value.
+    Create a treemap visualization for hierarchical data.
+
+    Args:
+        session_id: Visualization session ID
+        title: Chart title
+        sql: SQL query for data
+        labels_column: Column for treemap labels
+        values_column: Column for treemap values (sizes)
+        parent_column: Optional column for hierarchy parent
+
+    Returns:
+        Confirmation with chart ID
+    """
+    try:
+        if not PLOTLY_AVAILABLE:
+            return "Error: Plotly not installed."
+
+        if session_id not in _viz_sessions:
+            return f"Error: Session '{session_id}' not found."
+
+        session = _viz_sessions[session_id]
+        with get_connection() as conn:
+            df = conn.execute(sql).fetchdf()
+
+        colors = _get_color_palette(session.get("color_palette", "dark_friendly"))
+        theme = THEMES.get(session.get("theme", "dark"))
+
+        if parent_column:
+            fig = px.treemap(df, path=[parent_column, labels_column], values=values_column,
+                            title=title, color_discrete_sequence=colors)
+        else:
+            fig = px.treemap(df, path=[labels_column], values=values_column,
+                            title=title, color_discrete_sequence=colors)
+
+        fig.update_layout(
+            title_font_size=18,
+            title_font_color=theme["text_color"],
+            paper_bgcolor=theme["chart_bg"],
+            font=dict(color=theme["text_color"])
+        )
+
+        chart_id = f"treemap_{len(session['visualizations']) + 1}"
+        session["visualizations"].append({
+            "id": chart_id,
+            "type": "treemap",
+            "title": title,
+            "figure": fig,
+            "data": df.to_dict(orient="records")
+        })
+
+        return json.dumps({
+            "status": "success",
+            "chart_id": chart_id,
+            "type": "treemap",
+            "title": title,
+            "data_rows": len(df)
+        }, indent=2)
+
+    except Exception as e:
+        return f"Error creating treemap: {str(e)}"
+
+
+@tool
+def create_gauge_chart(session_id: str, title: str, sql: str, value_format: str = "number",
+                       min_val: float = 0, max_val: Optional[float] = None) -> str:
+    """
+    Create a gauge chart for displaying a single metric.
+
+    Args:
+        session_id: Visualization session ID
+        title: Chart title
+        sql: SQL query that returns a single value
+        value_format: 'number', 'currency', 'percentage'
+        min_val: Minimum value for gauge (default 0)
+        max_val: Maximum value for gauge (auto-calculated if not provided)
+
+    Returns:
+        Confirmation with chart ID
+    """
+    try:
+        if not PLOTLY_AVAILABLE:
+            return "Error: Plotly not installed."
+
+        if session_id not in _viz_sessions:
+            return f"Error: Session '{session_id}' not found."
+
+        session = _viz_sessions[session_id]
+        theme = THEMES.get(session.get("theme", "dark"))
+
+        with get_connection() as conn:
+            df = conn.execute(sql).fetchdf()
+            value = df.iloc[0, 0] if len(df) > 0 else 0
+
+            # Try to get min/max from query if it returns them
+            if len(df.columns) >= 3:
+                min_val = df.iloc[0, 1] if not pd.isna(df.iloc[0, 1]) else min_val
+                max_val = df.iloc[0, 2] if not pd.isna(df.iloc[0, 2]) else max_val
+
+        if max_val is None:
+            max_val = value * 1.5 if value > 0 else 100
+
+        formatted_value = _format_number(value, value_format)
+
+        fig = go.Figure(go.Indicator(
+            mode="gauge+number",
+            value=value,
+            number={'font': {'size': 36, 'color': theme["text_color"]}, 'suffix': '' if value_format == 'number' else ('$' if value_format == 'currency' else '%')},
+            title={'text': title, 'font': {'size': 18, 'color': theme["text_color"]}},
+            gauge={
+                'axis': {'range': [min_val, max_val], 'tickcolor': theme["text_secondary"]},
+                'bar': {'color': "#00F5D4"},
+                'bgcolor': theme["card_bg"],
+                'borderwidth': 2,
+                'bordercolor': theme["border_color"],
+                'steps': [
+                    {'range': [min_val, max_val * 0.33], 'color': '#EF4444'},
+                    {'range': [max_val * 0.33, max_val * 0.66], 'color': '#F59E0B'},
+                    {'range': [max_val * 0.66, max_val], 'color': '#10B981'}
+                ],
+            }
+        ))
+
+        fig.update_layout(
+            paper_bgcolor=theme["chart_bg"],
+            font=dict(color=theme["text_color"]),
+            height=300
+        )
+
+        chart_id = f"gauge_{len(session['visualizations']) + 1}"
+        session["visualizations"].append({
+            "id": chart_id,
+            "type": "gauge",
+            "title": title,
+            "figure": fig,
+            "data": [{"value": value}]
+        })
+
+        return json.dumps({
+            "status": "success",
+            "chart_id": chart_id,
+            "type": "gauge",
+            "title": title,
+            "value": _safe_json_serialize(value),
+            "formatted_value": formatted_value
+        }, indent=2)
+
+    except Exception as e:
+        return f"Error creating gauge chart: {str(e)}"
+
+
+@tool
+def create_stacked_bar_chart(session_id: str, title: str, sql: str, x_column: str, y_column: str,
+                             color_column: str, orientation: str = "v") -> str:
+    """
+    Create a stacked bar chart visualization.
+
+    Args:
+        session_id: Visualization session ID
+        title: Chart title
+        sql: SQL query for data
+        x_column: Column for X axis
+        y_column: Column for Y axis (values)
+        color_column: Column for stack segments
+        orientation: 'v' for vertical, 'h' for horizontal
+
+    Returns:
+        Confirmation with chart ID
+    """
+    try:
+        if not PLOTLY_AVAILABLE:
+            return "Error: Plotly not installed."
+
+        if session_id not in _viz_sessions:
+            return f"Error: Session '{session_id}' not found."
+
+        session = _viz_sessions[session_id]
+        with get_connection() as conn:
+            df = conn.execute(sql).fetchdf()
+
+        colors = _get_color_palette(session.get("color_palette", "dark_friendly"))
+        theme = THEMES.get(session.get("theme", "dark"))
+
+        if orientation == "h":
+            fig = px.bar(df, y=x_column, x=y_column, color=color_column,
+                        orientation='h', title=title, color_discrete_sequence=colors,
+                        barmode='stack')
+        else:
+            fig = px.bar(df, x=x_column, y=y_column, color=color_column,
+                        title=title, color_discrete_sequence=colors,
+                        barmode='stack')
+
+        fig.update_layout(
+            template="plotly_dark" if session.get("theme") == "dark" else "plotly_white",
+            title_font_size=18,
+            title_font_color=theme["text_color"],
+            paper_bgcolor=theme["chart_bg"],
+            plot_bgcolor=theme["chart_bg"],
+            font=dict(color=theme["text_color"]),
+            legend=dict(font=dict(color=theme["text_color"]))
+        )
+
+        chart_id = f"stacked_{len(session['visualizations']) + 1}"
+        session["visualizations"].append({
+            "id": chart_id,
+            "type": "stacked_bar",
+            "title": title,
+            "figure": fig,
+            "data": df.to_dict(orient="records")
+        })
+
+        return json.dumps({
+            "status": "success",
+            "chart_id": chart_id,
+            "type": "stacked_bar",
+            "title": title,
+            "data_rows": len(df)
+        }, indent=2)
+
+    except Exception as e:
+        return f"Error creating stacked bar chart: {str(e)}"
+
+
+@tool
+def create_kpi_card(session_id: str, title: str, sql: str, format_type: str = "number",
+                    color: str = "blue", icon: str = "chart-line",
+                    comparison_sql: Optional[str] = None) -> str:
+    """
+    Create a professional KPI card with optional trend comparison.
 
     Args:
         session_id: Visualization session ID
         title: KPI title
         sql: SQL query that returns a single value
-        format_type: 'number', 'currency', 'percentage'
-        prefix: Prefix for the value (e.g., '$')
-        suffix: Suffix for the value (e.g., '%')
-        comparison_sql: Optional SQL for comparison value (for delta)
+        format_type: 'number', 'currency', 'percentage', 'compact'
+        color: Card color ('green', 'blue', 'purple', 'orange', 'red', 'teal', 'pink', 'indigo')
+        icon: Icon name for the card
+        comparison_sql: Optional SQL for comparison value (for delta/trend)
 
     Returns:
         Confirmation with KPI ID
@@ -1130,23 +1860,22 @@ def create_kpi_card(session_id: str, title: str, sql: str, format_type: str = "n
             value = df.iloc[0, 0] if len(df) > 0 else 0
 
             delta = None
+            delta_value = None
             if comparison_sql:
-                comp_df = conn.execute(comparison_sql).fetchdf()
-                if len(comp_df) > 0:
-                    comp_value = comp_df.iloc[0, 0]
-                    if comp_value and comp_value != 0:
-                        delta = ((value - comp_value) / comp_value) * 100
+                try:
+                    comp_df = conn.execute(comparison_sql).fetchdf()
+                    if len(comp_df) > 0:
+                        comp_value = comp_df.iloc[0, 0]
+                        if comp_value and comp_value != 0:
+                            delta = ((value - comp_value) / comp_value) * 100
+                            delta_value = value - comp_value
+                except:
+                    pass
 
-        # Format value
-        if format_type == "currency":
-            formatted_value = f"{prefix}${value:,.2f}{suffix}"
-        elif format_type == "percentage":
-            formatted_value = f"{prefix}{value:.1f}%{suffix}"
-        else:
-            if isinstance(value, float):
-                formatted_value = f"{prefix}{value:,.2f}{suffix}"
-            else:
-                formatted_value = f"{prefix}{value:,}{suffix}"
+        formatted_value = _format_number(value, format_type)
+
+        if color not in KPI_COLORS:
+            color = "blue"
 
         kpi_id = f"kpi_{len(_viz_sessions[session_id]['kpis']) + 1}"
         _viz_sessions[session_id]["kpis"].append({
@@ -1155,7 +1884,10 @@ def create_kpi_card(session_id: str, title: str, sql: str, format_type: str = "n
             "value": _safe_json_serialize(value),
             "formatted_value": formatted_value,
             "delta": _safe_json_serialize(delta) if delta else None,
-            "format_type": format_type
+            "delta_value": _safe_json_serialize(delta_value) if delta_value else None,
+            "format_type": format_type,
+            "color": color,
+            "icon": icon
         })
 
         return json.dumps({
@@ -1164,7 +1896,8 @@ def create_kpi_card(session_id: str, title: str, sql: str, format_type: str = "n
             "title": title,
             "value": _safe_json_serialize(value),
             "formatted_value": formatted_value,
-            "delta": _safe_json_serialize(delta) if delta else None
+            "delta": _safe_json_serialize(delta) if delta else None,
+            "color": color
         }, indent=2)
 
     except Exception as e:
@@ -1192,35 +1925,55 @@ def create_data_table(session_id: str, title: str, sql: str, max_rows: int = 100
         if session_id not in _viz_sessions:
             return f"Error: Session '{session_id}' not found."
 
+        session = _viz_sessions[session_id]
+        theme = THEMES.get(session.get("theme", "dark"))
+
         with get_connection() as conn:
             df = conn.execute(f"{sql} LIMIT {max_rows}").fetchdf()
 
+        # Style based on theme
+        if session.get("theme") == "dark":
+            header_fill = '#1E40AF'
+            cell_fill = ['#1E293B', '#0F172A']
+            header_font_color = 'white'
+            cell_font_color = '#E2E8F0'
+        else:
+            header_fill = '#2E86AB'
+            cell_fill = ['#F8FAFC', '#FFFFFF']
+            header_font_color = 'white'
+            cell_font_color = '#1E293B'
+
         fig = go.Figure(data=[go.Table(
             header=dict(
-                values=list(df.columns),
-                fill_color='#2E86AB',
-                font=dict(color='white', size=12),
-                align='left'
+                values=[f"<b>{col}</b>" for col in df.columns],
+                fill_color=header_fill,
+                font=dict(color=header_font_color, size=13),
+                align='left',
+                height=40
             ),
             cells=dict(
                 values=[df[col].tolist() for col in df.columns],
-                fill_color='lavender',
-                align='left'
+                fill_color=[cell_fill * (len(df) // 2 + 1)][:len(df)],
+                font=dict(color=cell_font_color, size=12),
+                align='left',
+                height=35
             )
         )])
 
         fig.update_layout(
-            title=title,
-            title_font_size=16
+            title=dict(text=title, font=dict(size=18, color=theme["text_color"])),
+            paper_bgcolor=theme["chart_bg"],
+            margin=dict(l=20, r=20, t=60, b=20)
         )
 
-        table_id = f"table_{len(_viz_sessions[session_id]['visualizations']) + 1}"
-        _viz_sessions[session_id]["visualizations"].append({
+        table_id = f"table_{len(session['visualizations']) + 1}"
+        session["visualizations"].append({
             "id": table_id,
             "type": "data_table",
             "title": title,
             "figure": fig,
-            "data": df.to_dict(orient="records")
+            "data": df.to_dict(orient="records"),
+            "is_table": True  # Mark as table for sorting in dashboard
         })
 
         return json.dumps({
@@ -1243,7 +1996,8 @@ def create_data_table(session_id: str, title: str, sql: str, max_rows: int = 100
 @tool
 def generate_dashboard(session_id: str, output_filename: Optional[str] = None) -> str:
     """
-    Generate a complete HTML dashboard from all visualizations in the session.
+    Generate a professional HTML dashboard from all visualizations in the session.
+    KPIs at top, charts in middle, data tables always at the end.
 
     Args:
         session_id: Visualization session ID
@@ -1263,9 +2017,15 @@ def generate_dashboard(session_id: str, output_filename: Optional[str] = None) -
         title = session.get("dashboard_title", "Data Dashboard")
         kpis = session.get("kpis", [])
         visualizations = session.get("visualizations", [])
+        theme_name = session.get("theme", "dark")
+        theme = THEMES[theme_name]
 
         if not kpis and not visualizations:
             return "Error: No visualizations created. Create charts first."
+
+        # Separate charts from tables - tables go at the end
+        charts = [v for v in visualizations if not v.get("is_table", False)]
+        tables = [v for v in visualizations if v.get("is_table", False)]
 
         # Generate HTML
         html_content = f"""
@@ -1275,7 +2035,8 @@ def generate_dashboard(session_id: str, output_filename: Optional[str] = None) -
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{title}</title>
-    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         * {{
             margin: 0;
@@ -1283,119 +2044,299 @@ def generate_dashboard(session_id: str, output_filename: Optional[str] = None) -
             box-sizing: border-box;
         }}
         body {{
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', sans-serif;
+            background: {theme['bg_color']};
+            color: {theme['text_color']};
             min-height: 100vh;
-            padding: 20px;
+            line-height: 1.6;
         }}
         .dashboard-container {{
-            max-width: 1600px;
+            max-width: 1800px;
             margin: 0 auto;
+            padding: 20px;
         }}
+
+        /* Header Styles */
         .dashboard-header {{
-            background: linear-gradient(135deg, #2E86AB 0%, #1a5276 100%);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 30px;
-            border-radius: 15px;
-            margin-bottom: 25px;
-            box-shadow: 0 10px 30px rgba(46, 134, 171, 0.3);
+            padding: 30px 40px;
+            border-radius: 16px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 40px rgba(102, 126, 234, 0.4);
+            position: relative;
+            overflow: hidden;
+        }}
+        .dashboard-header::before {{
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -10%;
+            width: 400px;
+            height: 400px;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+            border-radius: 50%;
         }}
         .dashboard-header h1 {{
-            font-size: 2.5em;
-            margin-bottom: 10px;
+            font-size: 2.2em;
+            font-weight: 700;
+            margin-bottom: 8px;
+            position: relative;
+            z-index: 1;
         }}
         .dashboard-header p {{
             opacity: 0.9;
-            font-size: 1.1em;
+            font-size: 1em;
+            position: relative;
+            z-index: 1;
         }}
+
+        /* KPI Container */
         .kpi-container {{
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 20px;
-            margin-bottom: 25px;
+            margin-bottom: 30px;
         }}
+
+        /* KPI Card Styles */
         .kpi-card {{
-            background: white;
-            padding: 25px;
-            border-radius: 15px;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
-            text-align: center;
+            background: {theme['card_bg']};
+            padding: 24px;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            position: relative;
+            overflow: hidden;
             transition: transform 0.3s ease, box-shadow 0.3s ease;
+            border: 1px solid {theme['border_color']};
         }}
         .kpi-card:hover {{
             transform: translateY(-5px);
-            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            box-shadow: 0 8px 30px rgba(0,0,0,0.25);
         }}
+        .kpi-card::before {{
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            border-radius: 16px 16px 0 0;
+        }}
+        .kpi-card.green::before {{ background: linear-gradient(90deg, #10B981, #34D399); }}
+        .kpi-card.blue::before {{ background: linear-gradient(90deg, #3B82F6, #60A5FA); }}
+        .kpi-card.purple::before {{ background: linear-gradient(90deg, #8B5CF6, #A78BFA); }}
+        .kpi-card.orange::before {{ background: linear-gradient(90deg, #F59E0B, #FBBF24); }}
+        .kpi-card.red::before {{ background: linear-gradient(90deg, #EF4444, #F87171); }}
+        .kpi-card.teal::before {{ background: linear-gradient(90deg, #14B8A6, #2DD4BF); }}
+        .kpi-card.pink::before {{ background: linear-gradient(90deg, #EC4899, #F472B6); }}
+        .kpi-card.indigo::before {{ background: linear-gradient(90deg, #6366F1, #818CF8); }}
+
+        .kpi-icon {{
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.3em;
+            opacity: 0.8;
+        }}
+        .kpi-card.green .kpi-icon {{ background: rgba(16, 185, 129, 0.2); color: #10B981; }}
+        .kpi-card.blue .kpi-icon {{ background: rgba(59, 130, 246, 0.2); color: #3B82F6; }}
+        .kpi-card.purple .kpi-icon {{ background: rgba(139, 92, 246, 0.2); color: #8B5CF6; }}
+        .kpi-card.orange .kpi-icon {{ background: rgba(245, 158, 11, 0.2); color: #F59E0B; }}
+        .kpi-card.red .kpi-icon {{ background: rgba(239, 68, 68, 0.2); color: #EF4444; }}
+        .kpi-card.teal .kpi-icon {{ background: rgba(20, 184, 166, 0.2); color: #14B8A6; }}
+        .kpi-card.pink .kpi-icon {{ background: rgba(236, 72, 153, 0.2); color: #EC4899; }}
+        .kpi-card.indigo .kpi-icon {{ background: rgba(99, 102, 241, 0.2); color: #6366F1; }}
+
         .kpi-title {{
-            color: #666;
-            font-size: 0.9em;
+            color: {theme['text_secondary']};
+            font-size: 0.85em;
+            font-weight: 500;
             text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 10px;
+            letter-spacing: 0.5px;
+            margin-bottom: 12px;
         }}
         .kpi-value {{
-            font-size: 2.5em;
-            font-weight: bold;
-            color: #2E86AB;
+            font-size: 2.2em;
+            font-weight: 700;
+            margin-bottom: 8px;
+            line-height: 1.2;
         }}
+        .kpi-card.green .kpi-value {{ color: #10B981; }}
+        .kpi-card.blue .kpi-value {{ color: #3B82F6; }}
+        .kpi-card.purple .kpi-value {{ color: #8B5CF6; }}
+        .kpi-card.orange .kpi-value {{ color: #F59E0B; }}
+        .kpi-card.red .kpi-value {{ color: #EF4444; }}
+        .kpi-card.teal .kpi-value {{ color: #14B8A6; }}
+        .kpi-card.pink .kpi-value {{ color: #EC4899; }}
+        .kpi-card.indigo .kpi-value {{ color: #6366F1; }}
+
         .kpi-delta {{
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
             font-size: 0.9em;
-            margin-top: 5px;
+            font-weight: 500;
+            padding: 4px 10px;
+            border-radius: 20px;
         }}
         .kpi-delta.positive {{
-            color: #27ae60;
+            background: rgba(16, 185, 129, 0.15);
+            color: #10B981;
         }}
         .kpi-delta.negative {{
-            color: #e74c3c;
+            background: rgba(239, 68, 68, 0.15);
+            color: #EF4444;
         }}
+
+        /* Section Headers */
+        .section-header {{
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin: 30px 0 20px 0;
+            padding-bottom: 12px;
+            border-bottom: 2px solid {theme['border_color']};
+        }}
+        .section-header h2 {{
+            font-size: 1.3em;
+            font-weight: 600;
+            color: {theme['text_color']};
+        }}
+        .section-header i {{
+            color: #667eea;
+            font-size: 1.2em;
+        }}
+
+        /* Charts Container */
         .charts-container {{
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
-            gap: 25px;
-            margin-bottom: 25px;
+            gap: 24px;
+            margin-bottom: 30px;
         }}
         .chart-card {{
-            background: white;
-            border-radius: 15px;
+            background: {theme['card_bg']};
+            border-radius: 16px;
             padding: 20px;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            border: 1px solid {theme['border_color']};
+            transition: box-shadow 0.3s ease;
+        }}
+        .chart-card:hover {{
+            box-shadow: 0 8px 30px rgba(0,0,0,0.2);
         }}
         .chart-card.full-width {{
             grid-column: 1 / -1;
         }}
+
+        /* Tables Section */
+        .tables-section {{
+            margin-top: 40px;
+        }}
+        .table-card {{
+            background: {theme['card_bg']};
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            border: 1px solid {theme['border_color']};
+            overflow-x: auto;
+        }}
+
+        /* Footer */
         .footer {{
             text-align: center;
-            padding: 20px;
-            color: #666;
+            padding: 30px 20px;
+            color: {theme['text_secondary']};
             font-size: 0.9em;
+            margin-top: 40px;
+            border-top: 1px solid {theme['border_color']};
         }}
+        .footer a {{
+            color: #667eea;
+            text-decoration: none;
+        }}
+
+        /* Responsive */
         @media (max-width: 768px) {{
             .charts-container {{
                 grid-template-columns: 1fr;
             }}
+            .kpi-container {{
+                grid-template-columns: repeat(2, 1fr);
+            }}
+            .dashboard-header h1 {{
+                font-size: 1.5em;
+            }}
         }}
+
+        /* Animations */
+        @keyframes fadeInUp {{
+            from {{
+                opacity: 0;
+                transform: translateY(20px);
+            }}
+            to {{
+                opacity: 1;
+                transform: translateY(0);
+            }}
+        }}
+        .kpi-card, .chart-card, .table-card {{
+            animation: fadeInUp 0.5s ease-out forwards;
+        }}
+        .kpi-card:nth-child(1) {{ animation-delay: 0.1s; }}
+        .kpi-card:nth-child(2) {{ animation-delay: 0.15s; }}
+        .kpi-card:nth-child(3) {{ animation-delay: 0.2s; }}
+        .kpi-card:nth-child(4) {{ animation-delay: 0.25s; }}
+        .kpi-card:nth-child(5) {{ animation-delay: 0.3s; }}
+        .kpi-card:nth-child(6) {{ animation-delay: 0.35s; }}
     </style>
 </head>
 <body>
     <div class="dashboard-container">
         <div class="dashboard-header">
-            <h1>{title}</h1>
-            <p>Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Data Source: {session['table_name']}</p>
+            <h1><i class="fas fa-chart-line"></i> {title}</h1>
+            <p>Generated on {datetime.now().strftime('%B %d, %Y at %H:%M')} | Data Source: {session['table_name']}</p>
         </div>
 """
 
         # Add KPI cards
         if kpis:
-            html_content += '        <div class="kpi-container">\n'
+            html_content += '''
+        <div class="section-header">
+            <i class="fas fa-tachometer-alt"></i>
+            <h2>Key Performance Indicators</h2>
+        </div>
+        <div class="kpi-container">
+'''
+            icon_map = {
+                'chart-line': 'fa-chart-line',
+                'database': 'fa-database',
+                'users': 'fa-users',
+                'dollar': 'fa-dollar-sign',
+                'percent': 'fa-percent',
+                'trending': 'fa-arrow-trend-up'
+            }
+
             for kpi in kpis:
+                color = kpi.get('color', 'blue')
+                icon = icon_map.get(kpi.get('icon', 'chart-line'), 'fa-chart-line')
+
                 delta_html = ""
                 if kpi.get("delta") is not None:
                     delta_class = "positive" if kpi["delta"] > 0 else "negative"
-                    delta_symbol = "+" if kpi["delta"] > 0 else ""
-                    delta_html = f'<div class="kpi-delta {delta_class}">{delta_symbol}{kpi["delta"]:.1f}% vs previous</div>'
+                    delta_icon = "fa-arrow-up" if kpi["delta"] > 0 else "fa-arrow-down"
+                    delta_html = f'<div class="kpi-delta {delta_class}"><i class="fas {delta_icon}"></i> {abs(kpi["delta"]):.1f}%</div>'
 
                 html_content += f"""
-            <div class="kpi-card">
+            <div class="kpi-card {color}">
+                <div class="kpi-icon"><i class="fas {icon}"></i></div>
                 <div class="kpi-title">{kpi['title']}</div>
                 <div class="kpi-value">{kpi['formatted_value']}</div>
                 {delta_html}
@@ -1403,24 +2344,51 @@ def generate_dashboard(session_id: str, output_filename: Optional[str] = None) -
 """
             html_content += '        </div>\n'
 
-        # Add charts
-        if visualizations:
-            html_content += '        <div class="charts-container">\n'
-            for i, viz in enumerate(visualizations):
+        # Add charts (excluding tables)
+        if charts:
+            html_content += '''
+        <div class="section-header">
+            <i class="fas fa-chart-pie"></i>
+            <h2>Analytics & Insights</h2>
+        </div>
+        <div class="charts-container">
+'''
+            for i, viz in enumerate(charts):
                 fig = viz.get("figure")
                 if fig:
-                    # Update figure layout for better dashboard appearance
                     fig.update_layout(
                         margin=dict(l=40, r=40, t=60, b=40),
                         paper_bgcolor='rgba(0,0,0,0)',
                         plot_bgcolor='rgba(0,0,0,0)'
                     )
-
                     chart_html = fig.to_html(full_html=False, include_plotlyjs=False)
-                    full_width = "full-width" if viz["type"] in ["data_table", "heatmap"] else ""
                     html_content += f"""
-            <div class="chart-card {full_width}">
+            <div class="chart-card">
                 {chart_html}
+            </div>
+"""
+            html_content += '        </div>\n'
+
+        # Add data tables at the END
+        if tables:
+            html_content += '''
+        <div class="tables-section">
+            <div class="section-header">
+                <i class="fas fa-table"></i>
+                <h2>Data Details</h2>
+            </div>
+'''
+            for viz in tables:
+                fig = viz.get("figure")
+                if fig:
+                    fig.update_layout(
+                        margin=dict(l=20, r=20, t=60, b=20),
+                        paper_bgcolor='rgba(0,0,0,0)'
+                    )
+                    table_html = fig.to_html(full_html=False, include_plotlyjs=False)
+                    html_content += f"""
+            <div class="table-card">
+                {table_html}
             </div>
 """
             html_content += '        </div>\n'
@@ -1428,7 +2396,8 @@ def generate_dashboard(session_id: str, output_filename: Optional[str] = None) -
         # Footer
         html_content += f"""
         <div class="footer">
-            <p>Dashboard generated by Data Visualization Agent | Session: {session_id}</p>
+            <p>Dashboard generated by <strong>Data Visualization Agent</strong> | Session: {session_id}</p>
+            <p style="margin-top: 8px; font-size: 0.85em;">Powered by Plotly & Python</p>
         </div>
     </div>
 </body>
@@ -1456,9 +2425,11 @@ def generate_dashboard(session_id: str, output_filename: Optional[str] = None) -
             "status": "success",
             "dashboard_path": abs_path,
             "filename": output_filename,
+            "theme": theme_name,
             "kpi_count": len(kpis),
-            "chart_count": len(visualizations),
-            "message": f"Dashboard generated successfully! Open the HTML file in a browser to view.",
+            "chart_count": len(charts),
+            "table_count": len(tables),
+            "message": f"Professional dashboard generated successfully! Open the HTML file in a browser to view.",
             "open_command": f"start {abs_path}" if os.name == 'nt' else f"open {abs_path}"
         }, indent=2)
 
@@ -1469,8 +2440,9 @@ def generate_dashboard(session_id: str, output_filename: Optional[str] = None) -
 @tool
 def generate_dashboard_from_plan(session_id: str, output_filename: Optional[str] = None) -> str:
     """
-    Automatically generate a complete dashboard from the visualization plan.
-    This executes all planned visualizations and creates the final dashboard.
+    Automatically generate a complete professional dashboard from the visualization plan.
+    This executes all planned visualizations and creates the final dashboard with
+    KPIs at top, charts in middle, and data tables at the end.
 
     Args:
         session_id: Visualization session ID
@@ -1492,20 +2464,19 @@ def generate_dashboard_from_plan(session_id: str, output_filename: Optional[str]
         if not plan:
             return "Error: No visualization plan found. Use generate_viz_plan first."
 
-        results = {"kpis_created": 0, "charts_created": 0, "errors": []}
-        colors = _get_color_palette()
+        results = {"kpis_created": 0, "charts_created": 0, "tables_created": 0, "errors": []}
+        colors = _get_color_palette(session.get("color_palette", "dark_friendly"))
+        theme = THEMES.get(session.get("theme", "dark"))
+        kpi_colors = list(KPI_COLORS.keys())
 
         with get_connection() as conn:
             # Create KPIs
-            for kpi in plan.get("kpis", []):
+            for i, kpi in enumerate(plan.get("kpis", [])):
                 try:
                     df = conn.execute(kpi["sql"]).fetchdf()
                     value = df.iloc[0, 0] if len(df) > 0 else 0
-
-                    if isinstance(value, float):
-                        formatted = f"{value:,.2f}"
-                    else:
-                        formatted = f"{value:,}"
+                    format_type = kpi.get("format", "number")
+                    formatted = _format_number(value, format_type)
 
                     session["kpis"].append({
                         "id": kpi["id"],
@@ -1513,7 +2484,9 @@ def generate_dashboard_from_plan(session_id: str, output_filename: Optional[str]
                         "value": _safe_json_serialize(value),
                         "formatted_value": formatted,
                         "delta": None,
-                        "format_type": kpi.get("format", "number")
+                        "format_type": format_type,
+                        "color": kpi.get("color", kpi_colors[i % len(kpi_colors)]),
+                        "icon": kpi.get("icon", "chart-line")
                     })
                     results["kpis_created"] += 1
                 except Exception as e:
@@ -1523,6 +2496,7 @@ def generate_dashboard_from_plan(session_id: str, output_filename: Optional[str]
             for viz in plan.get("visualizations", []):
                 try:
                     df = conn.execute(viz["sql"]).fetchdf()
+                    fig = None
 
                     if viz["type"] == "bar_chart":
                         x_col = viz.get("x_column")
@@ -1530,17 +2504,29 @@ def generate_dashboard_from_plan(session_id: str, output_filename: Optional[str]
                         fig = px.bar(df, x=x_col, y=y_col, title=viz["title"],
                                     color_discrete_sequence=colors)
 
-                    elif viz["type"] == "pie_chart":
-                        col = viz.get("column")
-                        # Assume first column is names, second is values
-                        fig = px.pie(df, names=df.columns[0], values=df.columns[1],
+                    elif viz["type"] == "horizontal_bar":
+                        x_col = viz.get("x_column")
+                        y_col = viz.get("y_column")
+                        fig = px.bar(df, y=y_col, x=x_col, orientation='h',
                                     title=viz["title"], color_discrete_sequence=colors)
+
+                    elif viz["type"] in ["pie_chart", "donut_chart"]:
+                        hole = 0.4 if viz["type"] == "donut_chart" else 0
+                        fig = px.pie(df, names=df.columns[0], values=df.columns[1],
+                                    title=viz["title"], color_discrete_sequence=colors, hole=hole)
+                        fig.update_traces(textposition='inside', textinfo='percent+label')
 
                     elif viz["type"] == "line_chart":
                         x_col = viz.get("x_column")
                         y_col = viz.get("y_column")
                         fig = px.line(df, x=x_col, y=y_col, title=viz["title"],
                                      color_discrete_sequence=colors, markers=True)
+
+                    elif viz["type"] == "area_chart":
+                        x_col = viz.get("x_column")
+                        y_col = viz.get("y_column")
+                        fig = px.area(df, x=x_col, y=y_col, title=viz["title"],
+                                     color_discrete_sequence=colors)
 
                     elif viz["type"] == "histogram":
                         col = viz.get("column")
@@ -1553,22 +2539,113 @@ def generate_dashboard_from_plan(session_id: str, output_filename: Optional[str]
                         fig = px.scatter(df, x=x_col, y=y_col, title=viz["title"],
                                         color_discrete_sequence=colors)
 
-                    else:
-                        continue
+                    elif viz["type"] == "stacked_bar":
+                        x_col = viz.get("x_column")
+                        y_col = viz.get("y_column")
+                        color_col = viz.get("color_column")
+                        fig = px.bar(df, x=x_col, y=y_col, color=color_col,
+                                    title=viz["title"], color_discrete_sequence=colors,
+                                    barmode='stack')
 
-                    fig.update_layout(template="plotly_white", title_font_size=16)
+                    elif viz["type"] == "treemap":
+                        labels_col = viz.get("labels_column")
+                        values_col = viz.get("values_column")
+                        fig = px.treemap(df, path=[labels_col], values=values_col,
+                                        title=viz["title"], color_discrete_sequence=colors)
 
-                    session["visualizations"].append({
-                        "id": viz["id"],
-                        "type": viz["type"],
-                        "title": viz["title"],
-                        "figure": fig,
-                        "data": df.to_dict(orient="records")
-                    })
-                    results["charts_created"] += 1
+                    elif viz["type"] == "gauge":
+                        col = viz.get("column")
+                        value = df.iloc[0, 0] if len(df) > 0 else 0
+                        max_val = df.iloc[0, 2] if len(df.columns) >= 3 and len(df) > 0 else value * 1.5
+                        fig = go.Figure(go.Indicator(
+                            mode="gauge+number",
+                            value=value,
+                            title={'text': viz["title"]},
+                            gauge={
+                                'axis': {'range': [0, max_val]},
+                                'bar': {'color': "#00F5D4"},
+                                'steps': [
+                                    {'range': [0, max_val * 0.33], 'color': '#EF4444'},
+                                    {'range': [max_val * 0.33, max_val * 0.66], 'color': '#F59E0B'},
+                                    {'range': [max_val * 0.66, max_val], 'color': '#10B981'}
+                                ],
+                            }
+                        ))
+
+                    if fig:
+                        fig.update_layout(
+                            template="plotly_dark" if session.get("theme") == "dark" else "plotly_white",
+                            title_font_size=18,
+                            title_font_color=theme["text_color"],
+                            paper_bgcolor=theme["chart_bg"],
+                            plot_bgcolor=theme["chart_bg"],
+                            font=dict(color=theme["text_color"])
+                        )
+
+                        session["visualizations"].append({
+                            "id": viz["id"],
+                            "type": viz["type"],
+                            "title": viz["title"],
+                            "figure": fig,
+                            "data": df.to_dict(orient="records"),
+                            "is_table": False
+                        })
+                        results["charts_created"] += 1
 
                 except Exception as e:
                     results["errors"].append(f"Chart {viz['id']}: {str(e)}")
+
+            # Create data table (always at end)
+            if plan.get("data_table") and plan["data_table"].get("sql"):
+                try:
+                    df = conn.execute(plan["data_table"]["sql"]).fetchdf()
+
+                    if session.get("theme") == "dark":
+                        header_fill = '#1E40AF'
+                        cell_fill = ['#1E293B', '#0F172A']
+                        header_font_color = 'white'
+                        cell_font_color = '#E2E8F0'
+                    else:
+                        header_fill = '#2E86AB'
+                        cell_fill = ['#F8FAFC', '#FFFFFF']
+                        header_font_color = 'white'
+                        cell_font_color = '#1E293B'
+
+                    fig = go.Figure(data=[go.Table(
+                        header=dict(
+                            values=[f"<b>{col}</b>" for col in df.columns],
+                            fill_color=header_fill,
+                            font=dict(color=header_font_color, size=13),
+                            align='left',
+                            height=40
+                        ),
+                        cells=dict(
+                            values=[df[col].tolist() for col in df.columns],
+                            fill_color=[cell_fill * (len(df) // 2 + 1)][:len(df)],
+                            font=dict(color=cell_font_color, size=12),
+                            align='left',
+                            height=35
+                        )
+                    )])
+
+                    fig.update_layout(
+                        title=dict(text="Data Details", font=dict(size=18, color=theme["text_color"])),
+                        paper_bgcolor=theme["chart_bg"],
+                        margin=dict(l=20, r=20, t=60, b=20)
+                    )
+
+                    session["visualizations"].append({
+                        "id": "data_table",
+                        "type": "data_table",
+                        "title": "Data Details",
+                        "figure": fig,
+                        "data": df.to_dict(orient="records"),
+                        "is_table": True
+                    })
+                    results["tables_created"] += 1
+
+                except Exception as e:
+                    results["errors"].append(f"Data table: {str(e)}")
 
         # Generate the dashboard
         if results["kpis_created"] > 0 or results["charts_created"] > 0:
@@ -1614,6 +2691,8 @@ def get_viz_session_info(session_id: str) -> str:
             "session_id": session_id,
             "table_name": session.get("table_name"),
             "dashboard_title": session.get("dashboard_title"),
+            "theme": session.get("theme", "dark"),
+            "color_palette": session.get("color_palette"),
             "created_at": session.get("created_at"),
             "kpis_count": len(session.get("kpis", [])),
             "visualizations_count": len(session.get("visualizations", [])),
@@ -1625,7 +2704,7 @@ def get_viz_session_info(session_id: str) -> str:
                 for v in session.get("visualizations", [])
             ],
             "kpis": [
-                {"id": k["id"], "title": k["title"], "value": k.get("formatted_value")}
+                {"id": k["id"], "title": k["title"], "value": k.get("formatted_value"), "color": k.get("color")}
                 for k in session.get("kpis", [])
             ]
         }
@@ -1653,6 +2732,7 @@ def list_viz_sessions() -> str:
             sessions.append({
                 "session_id": sid,
                 "table_name": session.get("table_name"),
+                "theme": session.get("theme", "dark"),
                 "created_at": session.get("created_at"),
                 "visualizations": len(session.get("visualizations", [])),
                 "kpis": len(session.get("kpis", [])),
@@ -1737,6 +2817,7 @@ tool_registry.register(load_schema_relationships, "dataviz")
 # Analysis and planning tools
 tool_registry.register(analyze_data_for_viz, "dataviz")
 tool_registry.register(generate_viz_plan, "dataviz")
+tool_registry.register(set_dashboard_theme, "dataviz")
 
 # SQL and data collection tools
 tool_registry.register(execute_viz_query, "dataviz")
@@ -1745,10 +2826,15 @@ tool_registry.register(collect_all_viz_data, "dataviz")
 # Visualization creation tools
 tool_registry.register(create_bar_chart, "dataviz")
 tool_registry.register(create_line_chart, "dataviz")
+tool_registry.register(create_area_chart, "dataviz")
 tool_registry.register(create_pie_chart, "dataviz")
+tool_registry.register(create_donut_chart, "dataviz")
 tool_registry.register(create_histogram, "dataviz")
 tool_registry.register(create_scatter_plot, "dataviz")
 tool_registry.register(create_heatmap, "dataviz")
+tool_registry.register(create_treemap, "dataviz")
+tool_registry.register(create_gauge_chart, "dataviz")
+tool_registry.register(create_stacked_bar_chart, "dataviz")
 tool_registry.register(create_kpi_card, "dataviz")
 tool_registry.register(create_data_table, "dataviz")
 

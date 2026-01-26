@@ -2222,185 +2222,228 @@ DATAVIZ_SIMPLE_EXAMPLES = [
         "description": "Load relationships from JSON schema files"
     },
     {
-        "name": "Create Simple KPI",
+        "name": "Create Colorful KPI",
         "agent": "dataviz_agent",
-        "query": "Create a KPI card showing the total number of clients. First analyze the CLIENTS table to get a session.",
+        "query": "Create a blue KPI card showing the total number of clients. First analyze the CLIENTS table to get a session.",
         "expected_tools": ["analyze_data_for_viz", "create_kpi_card"],
-        "description": "Create a single KPI metric"
+        "description": "Create a single KPI with color"
+    },
+    {
+        "name": "Create Donut Chart",
+        "agent": "dataviz_agent",
+        "query": "Create a donut chart showing the distribution of risk profiles. First analyze CLIENTS to get a session.",
+        "expected_tools": ["analyze_data_for_viz", "create_donut_chart"],
+        "description": "Create a donut chart visualization"
     },
 ]
 
 DATAVIZ_MEDIUM_EXAMPLES = [
     {
-        "name": "Quick Dashboard from Plan",
+        "name": "Quick Dark Theme Dashboard",
         "agent": "dataviz_agent",
-        "query": """Create a quick dashboard for the CLIENTS table:
+        "query": """Create a quick professional dashboard for the CLIENTS table:
 1. Analyze the data
-2. Generate a visualization plan
-3. Auto-generate the dashboard from the plan""",
+2. Generate a visualization plan with dark theme
+3. Auto-generate the dashboard from the plan
+
+Use the dark theme for a professional look.""",
         "expected_tools": ["analyze_data_for_viz", "generate_viz_plan", "generate_dashboard_from_plan"],
-        "description": "Quick automated dashboard generation"
+        "description": "Quick automated dark theme dashboard"
     },
     {
-        "name": "Bar Chart Creation",
+        "name": "Area Chart Creation",
         "agent": "dataviz_agent",
-        "query": """Create a bar chart showing clients by country:
-1. Analyze the CLIENTS table
-2. Create a bar chart with SQL: SELECT COUNTRY, COUNT(*) as count FROM CLIENTS GROUP BY COUNTRY""",
-        "expected_tools": ["analyze_data_for_viz", "create_bar_chart"],
-        "description": "Create a bar chart visualization"
-    },
-    {
-        "name": "Pie Chart Creation",
-        "agent": "dataviz_agent",
-        "query": """Create a pie chart showing the distribution of client risk profiles:
-1. Analyze the CLIENTS table
-2. Create a pie chart for RISK_PROFILE distribution""",
-        "expected_tools": ["analyze_data_for_viz", "create_pie_chart"],
-        "description": "Create a pie chart visualization"
-    },
-    {
-        "name": "Multiple KPIs",
-        "agent": "dataviz_agent",
-        "query": """Create multiple KPI cards for the TRANSACTIONS table:
-1. Analyze TRANSACTIONS
-2. Create KPI for total transactions count
-3. Create KPI for total quantity traded
-4. Create KPI for total fees collected""",
-        "expected_tools": ["analyze_data_for_viz", "create_kpi_card"],
-        "description": "Create multiple KPI metrics"
-    },
-    {
-        "name": "Line Chart for Trends",
-        "agent": "dataviz_agent",
-        "query": """Create a line chart showing transaction trends over time:
+        "query": """Create an area chart showing transaction volume over time:
 1. Analyze the TRANSACTIONS table
-2. Create a line chart with TRADE_DATE on x-axis and count of transactions on y-axis""",
-        "expected_tools": ["analyze_data_for_viz", "create_line_chart"],
-        "description": "Create a time series line chart"
+2. Create an area chart with TRADE_DATE on x-axis and transaction count on y-axis""",
+        "expected_tools": ["analyze_data_for_viz", "create_area_chart"],
+        "description": "Create an area chart visualization"
     },
     {
-        "name": "Data Table Visualization",
+        "name": "Colorful Multiple KPIs",
         "agent": "dataviz_agent",
-        "query": """Create a data table visualization showing portfolio details:
+        "query": """Create multiple colorful KPI cards for the TRANSACTIONS table:
+1. Analyze TRANSACTIONS
+2. Create a green KPI for total transactions count
+3. Create a blue KPI for total quantity traded
+4. Create an orange KPI for total fees collected
+5. Create a purple KPI for average transaction price
+
+Use different colors for each KPI.""",
+        "expected_tools": ["analyze_data_for_viz", "create_kpi_card"],
+        "description": "Create multiple KPIs with distinct colors"
+    },
+    {
+        "name": "Gauge Chart Creation",
+        "agent": "dataviz_agent",
+        "query": """Create a gauge chart showing the average transaction price:
+1. Analyze the TRANSACTIONS table
+2. Create a gauge chart for the average PRICE value""",
+        "expected_tools": ["analyze_data_for_viz", "create_gauge_chart"],
+        "description": "Create a gauge chart visualization"
+    },
+    {
+        "name": "Treemap Visualization",
+        "agent": "dataviz_agent",
+        "query": """Create a treemap showing assets by type:
+1. Analyze the ASSETS table
+2. Create a treemap with ASSET_TYPE as labels and count as values""",
+        "expected_tools": ["analyze_data_for_viz", "create_treemap"],
+        "description": "Create a treemap chart"
+    },
+    {
+        "name": "Stacked Bar Chart",
+        "agent": "dataviz_agent",
+        "query": """Create a stacked bar chart showing transactions:
+1. Analyze TRANSACTIONS
+2. Create a stacked bar chart with TRANSACTION_TYPE grouped by CURRENCY""",
+        "expected_tools": ["analyze_data_for_viz", "create_stacked_bar_chart"],
+        "description": "Create a stacked bar chart"
+    },
+    {
+        "name": "Data Table at End",
+        "agent": "dataviz_agent",
+        "query": """Create a portfolio visualization with data table at the end:
 1. Analyze PORTFOLIOS
-2. Create a data table showing all portfolios with their details""",
-        "expected_tools": ["analyze_data_for_viz", "create_data_table"],
-        "description": "Create a data table visualization"
+2. Create a bar chart for portfolios by status
+3. Create a data table showing all portfolio details (should be placed at the end)""",
+        "expected_tools": ["analyze_data_for_viz", "create_bar_chart", "create_data_table"],
+        "description": "Visualization with data table at end"
     },
 ]
 
 DATAVIZ_COMPLEX_EXAMPLES = [
     {
-        "name": "Complete Client Dashboard",
+        "name": "Professional Client Dashboard",
         "agent": "dataviz_agent",
-        "query": """Create a comprehensive dashboard for the CLIENTS table:
+        "query": """Create a professional dashboard for the CLIENTS table with dark theme:
 
-1. DISCOVERY: Analyze the CLIENTS table and get schema info
-2. KPIs: Create cards for Total Clients, Countries, and KYC Approved count
-3. CHARTS:
+1. DISCOVERY: Analyze the CLIENTS table
+2. COLORFUL KPIs (use different colors for each):
+   - Blue: Total Clients
+   - Green: Countries
+   - Teal: KYC Approved count
+   - Purple: High Risk Clients
+3. DIVERSE CHARTS:
    - Bar chart: Clients by Country
-   - Pie chart: Risk Profile Distribution
-   - Bar chart: KYC Status breakdown
-4. TABLE: Data table showing all clients
-5. Generate the final HTML dashboard
+   - Donut chart: Risk Profile Distribution
+   - Horizontal bar: Top clients by some metric
+   - Treemap: KYC Status breakdown
+4. DATA TABLE: At the END showing all clients
+5. Generate the final HTML dashboard with dark theme
 
 Name it "Client Analytics Dashboard".""",
-        "expected_tools": ["analyze_data_for_viz", "get_table_schema_for_viz", "create_kpi_card", "create_bar_chart", "create_pie_chart", "create_data_table", "set_dashboard_title", "generate_dashboard"],
-        "description": "Full custom client dashboard"
+        "expected_tools": ["analyze_data_for_viz", "create_kpi_card", "create_bar_chart", "create_donut_chart", "create_treemap", "create_data_table", "set_dashboard_title", "generate_dashboard"],
+        "description": "Professional client dashboard with dark theme"
     },
     {
-        "name": "Transaction Analytics Dashboard",
+        "name": "Transaction Analytics Pro Dashboard",
         "agent": "dataviz_agent",
-        "query": """Create a transaction analytics dashboard:
+        "query": """Create a comprehensive transaction analytics dashboard with professional styling:
 
 1. Analyze TRANSACTIONS table
-2. Create KPIs:
-   - Total Transactions
-   - Total Quantity
-   - Total Value (QUANTITY * PRICE)
-   - Average Transaction Size
-3. Create visualizations:
+2. Create COLORFUL KPIs (6 different colors):
+   - Green: Total Transactions
+   - Blue: Total Quantity
+   - Orange: Total Value (QUANTITY * PRICE)
+   - Purple: Average Transaction Size
+   - Teal: Unique Assets Traded
+   - Red: Total Fees Collected
+3. Create DIVERSE visualizations:
    - Bar chart: Transactions by Type (BUY vs SELL)
-   - Line chart: Transaction volume over time
+   - Area chart: Transaction volume trend over time
+   - Donut chart: Transactions by Currency distribution
    - Histogram: Price distribution
-   - Pie chart: Transactions by Currency
-4. Add a data table showing recent transactions
-5. Generate the dashboard as "transactions_analytics.html" """,
-        "expected_tools": ["analyze_data_for_viz", "create_kpi_card", "create_bar_chart", "create_line_chart", "create_histogram", "create_pie_chart", "create_data_table", "generate_dashboard"],
-        "description": "Comprehensive transaction analytics"
+   - Stacked bar: Transactions by type and currency
+   - Gauge chart: Average transaction price
+4. DATA TABLE at the END showing recent transactions
+5. Use dark theme for professional look
+6. Generate as "transactions_pro_dashboard.html" """,
+        "expected_tools": ["analyze_data_for_viz", "create_kpi_card", "create_bar_chart", "create_area_chart", "create_donut_chart", "create_histogram", "create_stacked_bar_chart", "create_gauge_chart", "create_data_table", "generate_dashboard"],
+        "description": "Professional transaction analytics with all chart types"
     },
     {
-        "name": "Portfolio Performance Dashboard",
+        "name": "Portfolio Performance Pro Dashboard",
         "agent": "dataviz_agent",
-        "query": """Create a portfolio performance dashboard using PORTFOLIOS and HOLDINGS:
+        "query": """Create a professional portfolio performance dashboard:
 
-1. Analyze PORTFOLIOS table for the session
-2. Load schema relationships to understand table connections
-3. Create KPIs:
-   - Total Portfolios
-   - Active Portfolios
-   - Total Holdings Value
-4. Charts:
-   - Bar chart: Portfolios by Status
-   - Pie chart: Portfolios by Base Currency
-   - Bar chart: Top portfolios by number of holdings (requires JOIN)
-5. Generate the complete dashboard""",
-        "expected_tools": ["analyze_data_for_viz", "load_schema_relationships", "create_kpi_card", "create_bar_chart", "create_pie_chart", "generate_dashboard"],
-        "description": "Portfolio dashboard with relationships"
+1. Analyze PORTFOLIOS table
+2. Load schema relationships
+3. Set dark theme for professional appearance
+4. Create KPIs with colors:
+   - Blue: Total Portfolios
+   - Green: Active Portfolios
+   - Purple: Inactive Portfolios
+   - Orange: Unique Currencies
+5. Create charts:
+   - Donut chart: Portfolios by Status
+   - Bar chart: Portfolios by Base Currency
+   - Area chart: Portfolio creation trend over time
+   - Treemap: Status breakdown
+6. DATA TABLE at the end
+7. Generate the complete dashboard""",
+        "expected_tools": ["analyze_data_for_viz", "load_schema_relationships", "set_dashboard_theme", "create_kpi_card", "create_donut_chart", "create_bar_chart", "create_area_chart", "create_treemap", "create_data_table", "generate_dashboard"],
+        "description": "Portfolio dashboard with professional theme"
     },
     {
-        "name": "Asset Analysis Dashboard",
+        "name": "Asset Analysis Pro Dashboard",
         "agent": "dataviz_agent",
-        "query": """Create an asset analysis dashboard:
+        "query": """Create a professional asset analysis dashboard:
 
 1. Discovery: List tables and analyze ASSETS
-2. Generate visualization plan automatically
-3. Customize with additional charts:
-   - Scatter plot: Compare different asset characteristics
-   - Bar chart: Assets by Type
-   - Bar chart: Assets by Exchange
-   - Pie chart: Currency distribution
-4. Generate the final dashboard""",
-        "expected_tools": ["list_tables_for_viz", "analyze_data_for_viz", "generate_viz_plan", "create_scatter_plot", "create_bar_chart", "create_pie_chart", "generate_dashboard"],
-        "description": "Asset analysis with auto-plan"
+2. Set dark theme with vibrant color palette
+3. Generate visualization plan with theme="dark"
+4. The plan should include:
+   - Multiple colorful KPIs
+   - Variety of charts (bar, donut, treemap, etc.)
+   - Data table at the end
+5. Auto-generate the dashboard from the plan""",
+        "expected_tools": ["list_tables_for_viz", "analyze_data_for_viz", "generate_viz_plan", "generate_dashboard_from_plan"],
+        "description": "Professional asset dashboard with auto-plan"
     },
     {
-        "name": "Executive Summary Dashboard",
+        "name": "Executive Summary Pro Dashboard",
         "agent": "dataviz_agent",
-        "query": """Create an executive summary dashboard combining data from multiple tables:
+        "query": """Create an executive-level summary dashboard with professional dark theme:
 
 1. Start with CLIENTS analysis for the session
-2. Create high-level KPIs:
-   - Total Clients: SELECT COUNT(*) FROM CLIENTS
-   - Total Portfolios: SELECT COUNT(*) FROM PORTFOLIOS
-   - Total Assets: SELECT COUNT(*) FROM ASSETS
-   - Total Transactions: SELECT COUNT(*) FROM TRANSACTIONS
-3. Key visualizations:
-   - Bar chart: Client distribution by country
-   - Pie chart: Portfolio status distribution
-   - Line chart: Transaction activity over time
-   - Bar chart: Top asset types by transaction count
-4. Set title to "Executive Summary Dashboard"
-5. Generate as "executive_summary.html" """,
-        "expected_tools": ["analyze_data_for_viz", "create_kpi_card", "create_bar_chart", "create_pie_chart", "create_line_chart", "set_dashboard_title", "generate_dashboard"],
-        "description": "Executive summary across tables"
+2. Create PROMINENT KPIs with distinct colors:
+   - Blue: Total Clients (SELECT COUNT(*) FROM CLIENTS)
+   - Green: Total Portfolios (SELECT COUNT(*) FROM PORTFOLIOS)
+   - Purple: Total Assets (SELECT COUNT(*) FROM ASSETS)
+   - Orange: Total Transactions (SELECT COUNT(*) FROM TRANSACTIONS)
+   - Teal: Total Holdings (SELECT COUNT(*) FROM HOLDINGS)
+3. Create EXECUTIVE visualizations:
+   - Donut chart: Client distribution by country
+   - Bar chart: Portfolio status distribution
+   - Area chart: Transaction activity trend
+   - Treemap: Asset types breakdown
+   - Gauge chart: Average portfolio value
+4. DATA TABLE at the END
+5. Set title to "Executive Summary Dashboard"
+6. Use dark theme
+7. Generate as "executive_summary_pro.html" """,
+        "expected_tools": ["analyze_data_for_viz", "create_kpi_card", "create_donut_chart", "create_bar_chart", "create_area_chart", "create_treemap", "create_gauge_chart", "create_data_table", "set_dashboard_title", "generate_dashboard"],
+        "description": "Executive dashboard with all professional features"
     },
     {
-        "name": "Full Automated Dashboard Pipeline",
+        "name": "Full Automated Pro Dashboard",
         "agent": "dataviz_agent",
-        "query": """Create a fully automated dashboard for HOLDINGS:
+        "query": """Create a fully automated professional dashboard for HOLDINGS:
 
 1. List available tables to confirm HOLDINGS exists
 2. Get the schema with visualization suggestions
 3. Analyze the data to create a session
-4. Generate a comprehensive visualization plan
-5. Let the system auto-generate all visualizations from the plan
-6. Export the complete dashboard
+4. Generate a comprehensive visualization plan with dark theme
+5. Let the system auto-generate ALL visualizations from the plan:
+   - Multiple colorful KPIs
+   - Diverse chart types (bar, donut, area, histogram, etc.)
+   - Data table ALWAYS at the end
+6. Export the complete professional dashboard
 
-This should be done with minimal manual configuration - let the system decide the best visualizations based on the data.""",
+The system should decide the best visualizations based on the data and create a dashboard that tells the complete data story.""",
         "expected_tools": ["list_tables_for_viz", "get_table_schema_for_viz", "analyze_data_for_viz", "generate_viz_plan", "generate_dashboard_from_plan"],
-        "description": "Fully automated dashboard creation"
+        "description": "Fully automated professional dashboard"
     },
 ]
 
