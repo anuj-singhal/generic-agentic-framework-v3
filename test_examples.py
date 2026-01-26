@@ -2448,6 +2448,109 @@ The system should decide the best visualizations based on the data and create a 
 ]
 
 
+# Multi-Table Dashboard Examples
+DATAVIZ_MULTI_TABLE_EXAMPLES = [
+    {
+        "name": "Two-Table Dashboard (Clients + Portfolios)",
+        "agent": "dataviz_agent",
+        "query": """Create a dashboard combining CLIENTS and PORTFOLIOS tables:
+
+1. Analyze both tables to understand their schemas and relationships
+2. Create cross-table KPIs:
+   - Total clients
+   - Total portfolios
+   - Average portfolios per client
+3. Create cross-table charts:
+   - Bar chart: Number of portfolios per client
+   - Donut chart: Portfolio status distribution by client risk profile
+4. Generate the multi-table dashboard""",
+        "expected_tools": ["analyze_multi_table_for_viz", "get_cross_table_insights", "add_cross_table_dataset", "generate_multi_table_viz_plan", "generate_multi_table_dashboard"],
+        "description": "Two-table dashboard with JOINs"
+    },
+    {
+        "name": "Three-Table Wealth Dashboard",
+        "agent": "dataviz_agent",
+        "query": """Create a comprehensive wealth management dashboard using CLIENTS, PORTFOLIOS, and HOLDINGS:
+
+1. Analyze all three tables and their relationships
+2. Understand how they connect (CLIENT_ID, PORTFOLIO_ID)
+3. Create cross-table KPIs:
+   - Total portfolio value (sum of holdings)
+   - Total clients with holdings
+   - Average holdings per portfolio
+4. Create cross-table visualizations:
+   - Bar chart: Client wealth ranking (total holdings value per client)
+   - Donut chart: Holdings value by client risk profile
+   - Stacked bar: Portfolio value breakdown by client
+5. Generate the complete multi-table dashboard with dark theme""",
+        "expected_tools": ["analyze_multi_table_for_viz", "get_cross_table_insights", "add_cross_table_dataset", "generate_multi_table_viz_plan", "generate_multi_table_dashboard"],
+        "description": "Three-table wealth dashboard"
+    },
+    {
+        "name": "Transaction Analysis Multi-Table Dashboard",
+        "agent": "dataviz_agent",
+        "query": """Create a transaction analysis dashboard using TRANSACTIONS, ASSETS, and PORTFOLIOS:
+
+1. Analyze the three tables
+2. Create meaningful cross-table insights:
+   - Total transaction value (quantity * price)
+   - Transactions by asset type
+   - Portfolio transaction activity
+3. Visualize:
+   - Bar chart: Transaction volume by asset type
+   - Line chart: Transaction trends over time
+   - Donut chart: Buy vs Sell distribution by asset type
+4. Generate professional multi-table dashboard""",
+        "expected_tools": ["analyze_multi_table_for_viz", "get_cross_table_insights", "add_cross_table_dataset", "generate_multi_table_viz_plan", "generate_multi_table_dashboard"],
+        "description": "Transaction analysis across tables"
+    },
+    {
+        "name": "Full Database Dashboard (All Tables)",
+        "agent": "dataviz_agent",
+        "query": """Create an executive dashboard using ALL five tables: CLIENTS, PORTFOLIOS, ASSETS, TRANSACTIONS, HOLDINGS
+
+1. Analyze all tables and detect all relationships
+2. Create comprehensive cross-table KPIs:
+   - Total clients, portfolios, assets
+   - Total holdings value
+   - Total transaction volume
+   - Average portfolio value per client
+3. Create insightful cross-table charts:
+   - Client wealth distribution (bar chart)
+   - Asset allocation across all holdings (donut)
+   - Transaction activity by portfolio (line chart)
+   - Holdings breakdown by asset type (treemap)
+4. Include data tables for each major entity at the end
+5. Generate the complete executive dashboard with professional dark theme
+
+This should tell the complete story of the wealth management data.""",
+        "expected_tools": ["analyze_multi_table_for_viz", "get_cross_table_insights", "add_cross_table_dataset", "generate_multi_table_viz_plan", "generate_multi_table_dashboard"],
+        "description": "Full database executive dashboard"
+    },
+    {
+        "name": "Client-Centric Multi-Table View",
+        "agent": "dataviz_agent",
+        "query": """Create a client-centric dashboard that shows everything about clients from multiple tables:
+
+Using CLIENTS, PORTFOLIOS, HOLDINGS, and TRANSACTIONS:
+1. Analyze all tables with focus on CLIENT_ID relationships
+2. Create client-focused KPIs:
+   - Total clients
+   - Clients with portfolios
+   - Clients with recent transactions
+   - Average client wealth
+3. Create client-focused visualizations:
+   - Client distribution by country (bar)
+   - Client risk profile vs total wealth (donut)
+   - Top 10 clients by portfolio value (horizontal bar)
+   - Client onboarding trend vs portfolio creation (area chart)
+4. Generate the client-centric dashboard""",
+        "expected_tools": ["analyze_multi_table_for_viz", "get_cross_table_insights", "add_cross_table_dataset", "generate_multi_table_viz_plan", "generate_multi_table_dashboard"],
+        "description": "Client-centric multi-table dashboard"
+    },
+]
+
+
 def print_examples():
     """Print all examples in a formatted way."""
 
@@ -2491,6 +2594,7 @@ def print_examples():
         ("📈 DATAVIZ SIMPLE", DATAVIZ_SIMPLE_EXAMPLES),
         ("📈 DATAVIZ MEDIUM", DATAVIZ_MEDIUM_EXAMPLES),
         ("📈 DATAVIZ COMPLEX", DATAVIZ_COMPLEX_EXAMPLES),
+        ("📈 DATAVIZ MULTI-TABLE", DATAVIZ_MULTI_TABLE_EXAMPLES),
     ]
 
     for category_name, examples in all_categories:
@@ -2544,7 +2648,8 @@ def get_example_by_name(name: str) -> dict:
         EDA_COMPLEX_EXAMPLES +
         DATAVIZ_SIMPLE_EXAMPLES +
         DATAVIZ_MEDIUM_EXAMPLES +
-        DATAVIZ_COMPLEX_EXAMPLES
+        DATAVIZ_COMPLEX_EXAMPLES +
+        DATAVIZ_MULTI_TABLE_EXAMPLES
     )
 
     for example in all_examples:
@@ -2591,7 +2696,8 @@ def get_examples_by_agent(agent_name: str) -> list:
         EDA_COMPLEX_EXAMPLES +
         DATAVIZ_SIMPLE_EXAMPLES +
         DATAVIZ_MEDIUM_EXAMPLES +
-        DATAVIZ_COMPLEX_EXAMPLES
+        DATAVIZ_COMPLEX_EXAMPLES +
+        DATAVIZ_MULTI_TABLE_EXAMPLES
     )
 
     return [ex for ex in all_examples if ex['agent'] == agent_name]
@@ -2635,7 +2741,8 @@ def get_examples_by_tool(tool_name: str) -> list:
         EDA_COMPLEX_EXAMPLES +
         DATAVIZ_SIMPLE_EXAMPLES +
         DATAVIZ_MEDIUM_EXAMPLES +
-        DATAVIZ_COMPLEX_EXAMPLES
+        DATAVIZ_COMPLEX_EXAMPLES +
+        DATAVIZ_MULTI_TABLE_EXAMPLES
     )
 
     return [ex for ex in all_examples if tool_name in ex['expected_tools']]

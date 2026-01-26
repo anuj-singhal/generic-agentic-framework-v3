@@ -1,17 +1,20 @@
 """
-Data Visualization Tools Module - Professional Edition
-======================================================
+Data Visualization Tools Module - Professional Multi-Table Edition
+==================================================================
 
 Comprehensive data visualization tools for creating professional, interactive
 dashboards from DuckDB data. Uses Plotly for charts and generates beautiful
 HTML dashboards with dark/light themes.
 
 Features:
-- 25+ visualization tools
+- 30+ visualization tools
+- MULTI-TABLE SUPPORT: Analyze multiple tables, understand relationships via LLM
 - Professional KPI cards with trends and sparklines
 - Multiple chart types (bar, line, pie, donut, area, scatter, heatmap, treemap, gauge)
+- Cross-table visualizations with JOINs
 - Dark and light theme support
 - Automatic visualization planning based on data analysis
+- LLM-powered dataset generation from table relationships
 - Data table always at the end of dashboard
 """
 
@@ -171,21 +174,48 @@ def get_connection(read_only: bool = True):
                 pass
 
 
-def _create_session(table_name: str) -> str:
-    """Create a new visualization session."""
+def _create_session(table_name: str, multi_table: bool = False, table_names: List[str] = None) -> str:
+    """Create a new visualization session (single or multi-table)."""
     session_id = str(uuid.uuid4())[:8]
-    _viz_sessions[session_id] = {
-        "table_name": table_name,
-        "created_at": datetime.now().isoformat(),
-        "visualizations": [],
-        "kpis": [],
-        "data_cache": {},
-        "viz_plan": None,
-        "dashboard_title": f"{table_name} Dashboard",
-        "dashboard_generated": False,
-        "theme": "dark",  # Default to dark theme for professional look
-        "color_palette": "dark_friendly"
-    }
+
+    if multi_table and table_names:
+        title = " + ".join(table_names[:3])
+        if len(table_names) > 3:
+            title += f" (+{len(table_names) - 3} more)"
+        title += " Dashboard"
+        _viz_sessions[session_id] = {
+            "table_name": table_names[0],  # Primary table
+            "table_names": table_names,  # All tables
+            "multi_table": True,
+            "created_at": datetime.now().isoformat(),
+            "visualizations": [],
+            "kpis": [],
+            "data_cache": {},
+            "viz_plan": None,
+            "dashboard_title": title,
+            "dashboard_generated": False,
+            "theme": "dark",
+            "color_palette": "dark_friendly",
+            "tables_analysis": {},  # Analysis per table
+            "relationships": [],  # Detected relationships
+            "cross_table_datasets": [],  # LLM-generated datasets
+            "llm_insights": None  # LLM analysis of data possibilities
+        }
+    else:
+        _viz_sessions[session_id] = {
+            "table_name": table_name,
+            "table_names": [table_name],
+            "multi_table": False,
+            "created_at": datetime.now().isoformat(),
+            "visualizations": [],
+            "kpis": [],
+            "data_cache": {},
+            "viz_plan": None,
+            "dashboard_title": f"{table_name} Dashboard",
+            "dashboard_generated": False,
+            "theme": "dark",
+            "color_palette": "dark_friendly"
+        }
     return session_id
 
 
@@ -919,6 +949,728 @@ def set_dashboard_theme(session_id: str, theme: str = "dark", color_palette: str
 
     except Exception as e:
         return f"Error setting theme: {str(e)}"
+
+
+# =============================================================================
+# MULTI-TABLE ANALYSIS TOOLS
+# =============================================================================
+
+@tool
+def analyze_multi_table_for_viz(table_names: str, session_id: Optional[str] = None) -> str:
+    """
+    Analyze multiple tables for creating a comprehensive cross-table dashboard.
+    Examines schemas, detects relationships, and prepares for LLM analysis.
+
+    Args:
+        table_names: Comma-separated list of table names (e.g., "CLIENTS,PORTFOLIOS,HOLDINGS")
+        session_id: Optional existing session ID
+
+    Returns:
+        Multi-table analysis with schemas, relationships, and column classifications
+    """
+    try:
+        # Parse table names
+        tables = [t.strip().upper() for t in table_names.split(",")]
+
+        if len(tables) < 2:
+            return "Error: Please provide at least 2 tables separated by commas."
+
+        with get_connection() as conn:
+            # Verify all tables exist
+            existing_tables = [r[0].upper() for r in conn.execute("SHOW TABLES").fetchall()]
+            missing = [t for t in tables if t not in existing_tables]
+            if missing:
+                return f"Error: Tables not found: {missing}. Available: {existing_tables}"
+
+            # Create multi-table session
+            if not session_id or session_id not in _viz_sessions:
+                session_id = _create_session(tables[0], multi_table=True, table_names=tables)
+
+            session = _viz_sessions[session_id]
+
+            # Analyze each table
+            tables_analysis = {}
+            all_columns = {}  # Track all columns for relationship detection
+
+            for table_name in tables:
+                # Get schema
+                schema_result = conn.execute(f"DESCRIBE {table_name}").fetchall()
+                row_count = conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+
+                # Load sample data
+                df = conn.execute(f"SELECT * FROM {table_name} LIMIT 1000").fetchdf()
+
+                numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+                categorical_cols = df.select_dtypes(include=["object", "category"]).columns.tolist()
+                datetime_cols = df.select_dtypes(include=["datetime64"]).columns.tolist()
+
+                columns = []
+                for row in schema_result:
+                    col_name = row[0]
+                    col_type = row[1].upper()
+
+                    # Classify column
+                    if any(t in col_type for t in ["INT", "FLOAT", "DOUBLE", "DECIMAL"]):
+                        col_class = "numeric"
+                    elif any(t in col_type for t in ["DATE", "TIME", "TIMESTAMP"]):
+                        col_class = "datetime"
+                    else:
+                        col_class = "categorical"
+
+                    col_info = {
+                        "name": col_name,
+                        "type": col_type,
+                        "classification": col_class,
+                        "unique_count": int(df[col_name].nunique()) if col_name in df.columns else 0,
+                        "null_pct": round(df[col_name].isna().sum() / len(df) * 100, 2) if col_name in df.columns and len(df) > 0 else 0
+                    }
+
+                    # Check if this is likely a key column
+                    if col_name.endswith("_ID") or col_name == "ID":
+                        col_info["likely_key"] = True
+                        all_columns[f"{table_name}.{col_name}"] = {
+                            "table": table_name,
+                            "column": col_name,
+                            "unique_count": col_info["unique_count"],
+                            "row_count": row_count
+                        }
+
+                    columns.append(col_info)
+
+                tables_analysis[table_name] = {
+                    "row_count": row_count,
+                    "column_count": len(columns),
+                    "columns": columns,
+                    "numeric_columns": numeric_cols,
+                    "categorical_columns": categorical_cols,
+                    "datetime_columns": datetime_cols
+                }
+
+            # Detect relationships based on column names
+            relationships = []
+            for col_key1, col_info1 in all_columns.items():
+                for col_key2, col_info2 in all_columns.items():
+                    if col_key1 >= col_key2:
+                        continue
+                    # Check if columns might be related (same name or FK pattern)
+                    col1 = col_info1["column"]
+                    col2 = col_info2["column"]
+                    table1 = col_info1["table"]
+                    table2 = col_info2["table"]
+
+                    if col1 == col2:  # Same column name in different tables
+                        # Determine parent/child based on uniqueness
+                        if col_info1["unique_count"] == col_info1["row_count"]:
+                            parent, child = table1, table2
+                        elif col_info2["unique_count"] == col_info2["row_count"]:
+                            parent, child = table2, table1
+                        else:
+                            parent, child = table1, table2
+
+                        relationships.append({
+                            "parent_table": parent,
+                            "child_table": child,
+                            "join_column": col1,
+                            "relationship_type": "foreign_key",
+                            "join_sql": f"{parent}.{col1} = {child}.{col1}"
+                        })
+
+            session["tables_analysis"] = tables_analysis
+            session["relationships"] = relationships
+
+            # Generate LLM prompt for cross-table analysis
+            llm_prompt = _generate_multi_table_llm_prompt(tables, tables_analysis, relationships)
+            session["llm_analysis_prompt"] = llm_prompt
+
+            return json.dumps({
+                "session_id": session_id,
+                "tables_analyzed": tables,
+                "table_count": len(tables),
+                "relationships_detected": len(relationships),
+                "tables_summary": {
+                    t: {
+                        "rows": a["row_count"],
+                        "columns": a["column_count"],
+                        "numeric_cols": len(a["numeric_columns"]),
+                        "categorical_cols": len(a["categorical_columns"])
+                    }
+                    for t, a in tables_analysis.items()
+                },
+                "relationships": relationships,
+                "llm_prompt_for_datasets": llm_prompt,
+                "next_step": "Use get_cross_table_insights() to get LLM analysis of possible datasets and visualizations"
+            }, indent=2, default=str)
+
+    except Exception as e:
+        return f"Error analyzing tables: {str(e)}"
+
+
+def _generate_multi_table_llm_prompt(tables: List[str], tables_analysis: Dict, relationships: List) -> str:
+    """Generate a prompt for LLM to analyze cross-table possibilities."""
+    prompt = f"""Analyze these {len(tables)} database tables and suggest meaningful cross-table datasets for a dashboard.
+
+TABLES:
+"""
+    for table, analysis in tables_analysis.items():
+        prompt += f"\n{table} ({analysis['row_count']} rows):\n"
+        for col in analysis["columns"]:
+            key_marker = " [KEY]" if col.get("likely_key") else ""
+            prompt += f"  - {col['name']} ({col['classification']}){key_marker}\n"
+
+    if relationships:
+        prompt += "\nDETECTED RELATIONSHIPS:\n"
+        for rel in relationships:
+            prompt += f"  - {rel['parent_table']} -> {rel['child_table']} via {rel['join_column']}\n"
+
+    prompt += """
+Based on these tables and relationships, suggest:
+
+1. CROSS-TABLE KPIs (metrics that combine data from multiple tables):
+   - What aggregate metrics would be valuable?
+   - What counts/sums/averages span multiple tables?
+
+2. CROSS-TABLE CHARTS (visualizations requiring JOINs):
+   - Bar charts comparing data across related tables
+   - Pie/Donut charts showing distributions with joined data
+   - Line charts for trends using multiple tables
+   - Any other meaningful cross-table visualizations
+
+3. SQL QUERIES for each suggestion (using proper JOINs)
+
+Format your response as JSON with this structure:
+{
+  "kpis": [
+    {"title": "...", "description": "...", "sql": "SELECT ... FROM ... JOIN ..."}
+  ],
+  "charts": [
+    {"type": "bar_chart|donut_chart|line_chart|etc", "title": "...", "description": "...", "sql": "...", "x_column": "...", "y_column": "..."}
+  ],
+  "insights": "Brief description of what story this data can tell"
+}
+"""
+    return prompt
+
+
+@tool
+def get_cross_table_insights(session_id: str) -> str:
+    """
+    Get the LLM analysis prompt for cross-table dataset suggestions.
+    The LLM should use this prompt to generate meaningful cross-table visualizations.
+
+    This tool returns a structured prompt that describes all tables, their columns,
+    and detected relationships. The LLM should analyze this and suggest:
+    1. Cross-table KPIs (metrics spanning multiple tables)
+    2. Cross-table charts (visualizations using JOINs)
+    3. SQL queries for each visualization
+
+    Args:
+        session_id: Multi-table visualization session ID
+
+    Returns:
+        LLM prompt for generating cross-table dataset suggestions
+    """
+    try:
+        if session_id not in _viz_sessions:
+            return f"Error: Session '{session_id}' not found."
+
+        session = _viz_sessions[session_id]
+
+        if not session.get("multi_table"):
+            return "Error: This is not a multi-table session. Use analyze_multi_table_for_viz first."
+
+        prompt = session.get("llm_analysis_prompt", "")
+
+        if not prompt:
+            return "Error: No analysis prompt available. Run analyze_multi_table_for_viz first."
+
+        return json.dumps({
+            "session_id": session_id,
+            "tables": session.get("table_names", []),
+            "relationships": session.get("relationships", []),
+            "llm_prompt": prompt,
+            "instructions": """
+INSTRUCTIONS FOR LLM:
+1. Read the prompt above which describes the database tables
+2. Based on the tables and relationships, generate cross-table visualizations
+3. Return your suggestions in JSON format as specified in the prompt
+4. After generating suggestions, use add_cross_table_dataset() to add each dataset
+5. Then use generate_multi_table_viz_plan() to create the final dashboard plan
+"""
+        }, indent=2)
+
+    except Exception as e:
+        return f"Error getting insights prompt: {str(e)}"
+
+
+@tool
+def add_cross_table_dataset(session_id: str, dataset_type: str, title: str, sql: str,
+                            description: str = "", chart_type: str = "bar_chart",
+                            x_column: Optional[str] = None, y_column: Optional[str] = None,
+                            names_column: Optional[str] = None, values_column: Optional[str] = None) -> str:
+    """
+    Add a cross-table dataset to the session for visualization.
+    Use this after analyzing the tables to add LLM-suggested visualizations.
+
+    Args:
+        session_id: Multi-table visualization session ID
+        dataset_type: 'kpi' or 'chart'
+        title: Title for the KPI or chart
+        sql: SQL query (should include JOINs for cross-table data)
+        description: Description of what this visualization shows
+        chart_type: For charts - 'bar_chart', 'donut_chart', 'line_chart', 'area_chart', 'scatter_plot', 'stacked_bar', 'treemap', 'histogram'
+        x_column: X-axis column (for bar, line, scatter charts)
+        y_column: Y-axis column (for bar, line, scatter charts)
+        names_column: Names column (for pie/donut charts)
+        values_column: Values column (for pie/donut/treemap charts)
+
+    Returns:
+        Confirmation of added dataset
+    """
+    try:
+        if session_id not in _viz_sessions:
+            return f"Error: Session '{session_id}' not found."
+
+        session = _viz_sessions[session_id]
+
+        if not session.get("cross_table_datasets"):
+            session["cross_table_datasets"] = []
+
+        dataset = {
+            "id": f"cross_{len(session['cross_table_datasets']) + 1}",
+            "type": dataset_type,
+            "title": title,
+            "sql": sql,
+            "description": description
+        }
+
+        if dataset_type == "chart":
+            dataset["chart_type"] = chart_type
+            if x_column:
+                dataset["x_column"] = x_column
+            if y_column:
+                dataset["y_column"] = y_column
+            if names_column:
+                dataset["names_column"] = names_column
+            if values_column:
+                dataset["values_column"] = values_column
+
+        session["cross_table_datasets"].append(dataset)
+
+        return json.dumps({
+            "status": "success",
+            "dataset_id": dataset["id"],
+            "type": dataset_type,
+            "title": title,
+            "total_datasets": len(session["cross_table_datasets"]),
+            "message": f"Added cross-table {dataset_type}: {title}"
+        }, indent=2)
+
+    except Exception as e:
+        return f"Error adding dataset: {str(e)}"
+
+
+@tool
+def generate_multi_table_viz_plan(session_id: str, dashboard_title: Optional[str] = None, theme: str = "dark") -> str:
+    """
+    Generate a comprehensive visualization plan for a multi-table dashboard.
+    This combines:
+    1. Single-table visualizations for each table
+    2. Cross-table visualizations (KPIs and charts using JOINs)
+    3. Professional layout with KPIs at top, charts in middle, tables at end
+
+    Args:
+        session_id: Multi-table visualization session ID
+        dashboard_title: Optional custom title
+        theme: 'dark' for professional dark theme, 'light' for light theme
+
+    Returns:
+        Comprehensive multi-table visualization plan
+    """
+    try:
+        if session_id not in _viz_sessions:
+            return f"Error: Session '{session_id}' not found."
+
+        session = _viz_sessions[session_id]
+
+        if not session.get("multi_table"):
+            return "Error: This is not a multi-table session. Use analyze_multi_table_for_viz first."
+
+        tables = session.get("table_names", [])
+        tables_analysis = session.get("tables_analysis", {})
+        relationships = session.get("relationships", [])
+        cross_table_datasets = session.get("cross_table_datasets", [])
+
+        if dashboard_title:
+            session["dashboard_title"] = dashboard_title
+
+        session["theme"] = theme
+        session["color_palette"] = "dark_friendly" if theme == "dark" else "corporate"
+
+        # Generate plan
+        plan = {
+            "session_id": session_id,
+            "dashboard_title": session["dashboard_title"],
+            "tables": tables,
+            "multi_table": True,
+            "theme": theme,
+            "layout": {"sections": []},
+            "kpis": [],
+            "visualizations": [],
+            "data_tables": []
+        }
+
+        kpi_colors = list(KPI_COLORS.keys())
+        kpi_idx = 0
+
+        # Section 1: Cross-Table KPIs (from LLM suggestions)
+        kpi_section = {
+            "title": "Key Performance Indicators",
+            "type": "kpi_row",
+            "items": []
+        }
+
+        # Add cross-table KPIs
+        cross_kpis = [d for d in cross_table_datasets if d["type"] == "kpi"]
+        for kpi in cross_kpis:
+            kpi_item = {
+                "id": kpi["id"],
+                "title": kpi["title"],
+                "sql": kpi["sql"],
+                "format": "compact",
+                "color": kpi_colors[kpi_idx % len(kpi_colors)],
+                "icon": "chart-line",
+                "cross_table": True
+            }
+            kpi_section["items"].append(kpi_item)
+            plan["kpis"].append(kpi_item)
+            kpi_idx += 1
+
+        # Add table-level KPIs (counts for each table)
+        for table in tables:
+            kpi_item = {
+                "id": f"kpi_{table.lower()}_count",
+                "title": f"Total {table.replace('_', ' ').title()}",
+                "sql": f"SELECT COUNT(*) as value FROM {table}",
+                "format": "compact",
+                "color": kpi_colors[kpi_idx % len(kpi_colors)],
+                "icon": "database",
+                "cross_table": False
+            }
+            kpi_section["items"].append(kpi_item)
+            plan["kpis"].append(kpi_item)
+            kpi_idx += 1
+
+        plan["layout"]["sections"].append(kpi_section)
+
+        # Section 2: Cross-Table Charts (from LLM suggestions)
+        if cross_table_datasets:
+            cross_chart_section = {
+                "title": "Cross-Table Analytics",
+                "type": "chart_grid",
+                "items": []
+            }
+
+            cross_charts = [d for d in cross_table_datasets if d["type"] == "chart"]
+            for chart in cross_charts:
+                viz_item = {
+                    "id": chart["id"],
+                    "type": chart.get("chart_type", "bar_chart"),
+                    "title": chart["title"],
+                    "sql": chart["sql"],
+                    "cross_table": True
+                }
+                if chart.get("x_column"):
+                    viz_item["x_column"] = chart["x_column"]
+                if chart.get("y_column"):
+                    viz_item["y_column"] = chart["y_column"]
+                if chart.get("names_column"):
+                    viz_item["names_column"] = chart["names_column"]
+                if chart.get("values_column"):
+                    viz_item["values_column"] = chart["values_column"]
+
+                cross_chart_section["items"].append(viz_item)
+                plan["visualizations"].append(viz_item)
+
+            if cross_chart_section["items"]:
+                plan["layout"]["sections"].append(cross_chart_section)
+
+        # Section 3: Per-Table Charts
+        for table in tables:
+            analysis = tables_analysis.get(table, {})
+            if not analysis:
+                continue
+
+            table_section = {
+                "title": f"{table.replace('_', ' ').title()} Analysis",
+                "type": "chart_grid",
+                "items": []
+            }
+
+            # Add bar chart for categorical columns
+            cat_cols = analysis.get("categorical_columns", [])
+            num_cols = analysis.get("numeric_columns", [])
+
+            for cat_col in cat_cols[:2]:
+                viz_item = {
+                    "id": f"chart_{table.lower()}_{cat_col.lower()}",
+                    "type": "donut_chart",
+                    "title": f"{cat_col.replace('_', ' ').title()} Distribution",
+                    "sql": f"SELECT {cat_col}, COUNT(*) as count FROM {table} GROUP BY {cat_col} ORDER BY count DESC LIMIT 10",
+                    "names_column": cat_col,
+                    "values_column": "count",
+                    "cross_table": False
+                }
+                table_section["items"].append(viz_item)
+                plan["visualizations"].append(viz_item)
+
+            # Add histogram for numeric columns
+            for num_col in num_cols[:2]:
+                viz_item = {
+                    "id": f"chart_{table.lower()}_{num_col.lower()}_hist",
+                    "type": "histogram",
+                    "title": f"{num_col.replace('_', ' ').title()} Distribution",
+                    "sql": f"SELECT {num_col} FROM {table} WHERE {num_col} IS NOT NULL",
+                    "column": num_col,
+                    "cross_table": False
+                }
+                table_section["items"].append(viz_item)
+                plan["visualizations"].append(viz_item)
+
+            if table_section["items"]:
+                plan["layout"]["sections"].append(table_section)
+
+        # Section 4: Data Tables - ALWAYS AT THE END
+        for table in tables:
+            table_section = {
+                "id": f"table_{table.lower()}",
+                "title": f"{table.replace('_', ' ').title()} Data",
+                "type": "data_table",
+                "sql": f"SELECT * FROM {table} LIMIT 50"
+            }
+            plan["data_tables"].append(table_section)
+
+        session["viz_plan"] = plan
+
+        return json.dumps(plan, indent=2)
+
+    except Exception as e:
+        return f"Error generating multi-table plan: {str(e)}"
+
+
+@tool
+def generate_multi_table_dashboard(session_id: str, output_filename: Optional[str] = None) -> str:
+    """
+    Generate a complete professional dashboard from a multi-table visualization plan.
+    Executes all cross-table and single-table visualizations and creates the final HTML.
+
+    Args:
+        session_id: Multi-table visualization session ID
+        output_filename: Optional filename for the dashboard
+
+    Returns:
+        Path to generated dashboard
+    """
+    try:
+        if not PLOTLY_AVAILABLE:
+            return "Error: Plotly not installed."
+
+        if session_id not in _viz_sessions:
+            return f"Error: Session '{session_id}' not found."
+
+        session = _viz_sessions[session_id]
+        plan = session.get("viz_plan")
+
+        if not plan:
+            return "Error: No visualization plan found. Use generate_multi_table_viz_plan first."
+
+        results = {"kpis_created": 0, "charts_created": 0, "tables_created": 0, "errors": []}
+        colors = _get_color_palette(session.get("color_palette", "dark_friendly"))
+        theme = THEMES.get(session.get("theme", "dark"))
+        kpi_colors = list(KPI_COLORS.keys())
+
+        with get_connection() as conn:
+            # Create KPIs
+            for i, kpi in enumerate(plan.get("kpis", [])):
+                try:
+                    df = conn.execute(kpi["sql"]).fetchdf()
+                    value = df.iloc[0, 0] if len(df) > 0 else 0
+                    format_type = kpi.get("format", "number")
+                    formatted = _format_number(value, format_type)
+
+                    session["kpis"].append({
+                        "id": kpi["id"],
+                        "title": kpi["title"],
+                        "value": _safe_json_serialize(value),
+                        "formatted_value": formatted,
+                        "delta": None,
+                        "format_type": format_type,
+                        "color": kpi.get("color", kpi_colors[i % len(kpi_colors)]),
+                        "icon": kpi.get("icon", "chart-line"),
+                        "cross_table": kpi.get("cross_table", False)
+                    })
+                    results["kpis_created"] += 1
+                except Exception as e:
+                    results["errors"].append(f"KPI {kpi['id']}: {str(e)}")
+
+            # Create visualizations
+            for viz in plan.get("visualizations", []):
+                try:
+                    df = conn.execute(viz["sql"]).fetchdf()
+                    fig = None
+
+                    if viz["type"] == "bar_chart":
+                        x_col = viz.get("x_column", df.columns[0])
+                        y_col = viz.get("y_column", df.columns[1] if len(df.columns) > 1 else df.columns[0])
+                        fig = px.bar(df, x=x_col, y=y_col, title=viz["title"],
+                                    color_discrete_sequence=colors)
+
+                    elif viz["type"] == "horizontal_bar":
+                        x_col = viz.get("x_column", df.columns[1] if len(df.columns) > 1 else df.columns[0])
+                        y_col = viz.get("y_column", df.columns[0])
+                        fig = px.bar(df, y=y_col, x=x_col, orientation='h',
+                                    title=viz["title"], color_discrete_sequence=colors)
+
+                    elif viz["type"] in ["pie_chart", "donut_chart"]:
+                        hole = 0.4 if viz["type"] == "donut_chart" else 0
+                        names_col = viz.get("names_column", df.columns[0])
+                        values_col = viz.get("values_column", df.columns[1] if len(df.columns) > 1 else df.columns[0])
+                        fig = px.pie(df, names=names_col, values=values_col,
+                                    title=viz["title"], color_discrete_sequence=colors, hole=hole)
+                        fig.update_traces(textposition='inside', textinfo='percent+label')
+
+                    elif viz["type"] == "line_chart":
+                        x_col = viz.get("x_column", df.columns[0])
+                        y_col = viz.get("y_column", df.columns[1] if len(df.columns) > 1 else df.columns[0])
+                        fig = px.line(df, x=x_col, y=y_col, title=viz["title"],
+                                     color_discrete_sequence=colors, markers=True)
+
+                    elif viz["type"] == "area_chart":
+                        x_col = viz.get("x_column", df.columns[0])
+                        y_col = viz.get("y_column", df.columns[1] if len(df.columns) > 1 else df.columns[0])
+                        fig = px.area(df, x=x_col, y=y_col, title=viz["title"],
+                                     color_discrete_sequence=colors)
+
+                    elif viz["type"] == "histogram":
+                        col = viz.get("column", df.columns[0])
+                        fig = px.histogram(df, x=col, title=viz["title"],
+                                          color_discrete_sequence=colors)
+
+                    elif viz["type"] == "scatter_plot":
+                        x_col = viz.get("x_column", df.columns[0])
+                        y_col = viz.get("y_column", df.columns[1] if len(df.columns) > 1 else df.columns[0])
+                        fig = px.scatter(df, x=x_col, y=y_col, title=viz["title"],
+                                        color_discrete_sequence=colors)
+
+                    elif viz["type"] == "stacked_bar":
+                        x_col = viz.get("x_column", df.columns[0])
+                        y_col = viz.get("y_column", df.columns[2] if len(df.columns) > 2 else df.columns[1])
+                        color_col = viz.get("color_column", df.columns[1] if len(df.columns) > 1 else None)
+                        if color_col:
+                            fig = px.bar(df, x=x_col, y=y_col, color=color_col,
+                                        title=viz["title"], color_discrete_sequence=colors,
+                                        barmode='stack')
+                        else:
+                            fig = px.bar(df, x=x_col, y=y_col, title=viz["title"],
+                                        color_discrete_sequence=colors)
+
+                    elif viz["type"] == "treemap":
+                        labels_col = viz.get("labels_column", df.columns[0])
+                        values_col = viz.get("values_column", df.columns[1] if len(df.columns) > 1 else df.columns[0])
+                        fig = px.treemap(df, path=[labels_col], values=values_col,
+                                        title=viz["title"], color_discrete_sequence=colors)
+
+                    if fig:
+                        fig.update_layout(
+                            template="plotly_dark" if session.get("theme") == "dark" else "plotly_white",
+                            title_font_size=18,
+                            title_font_color=theme["text_color"],
+                            paper_bgcolor=theme["chart_bg"],
+                            plot_bgcolor=theme["chart_bg"],
+                            font=dict(color=theme["text_color"])
+                        )
+
+                        session["visualizations"].append({
+                            "id": viz["id"],
+                            "type": viz["type"],
+                            "title": viz["title"],
+                            "figure": fig,
+                            "data": df.to_dict(orient="records"),
+                            "is_table": False,
+                            "cross_table": viz.get("cross_table", False)
+                        })
+                        results["charts_created"] += 1
+
+                except Exception as e:
+                    results["errors"].append(f"Chart {viz['id']}: {str(e)}")
+
+            # Create data tables - ALWAYS at the end
+            for table_def in plan.get("data_tables", []):
+                try:
+                    df = conn.execute(table_def["sql"]).fetchdf()
+
+                    if session.get("theme") == "dark":
+                        header_fill = '#1E40AF'
+                        cell_fill = ['#1E293B', '#0F172A']
+                        header_font_color = 'white'
+                        cell_font_color = '#E2E8F0'
+                    else:
+                        header_fill = '#2E86AB'
+                        cell_fill = ['#F8FAFC', '#FFFFFF']
+                        header_font_color = 'white'
+                        cell_font_color = '#1E293B'
+
+                    fig = go.Figure(data=[go.Table(
+                        header=dict(
+                            values=[f"<b>{col}</b>" for col in df.columns],
+                            fill_color=header_fill,
+                            font=dict(color=header_font_color, size=13),
+                            align='left',
+                            height=40
+                        ),
+                        cells=dict(
+                            values=[df[col].tolist() for col in df.columns],
+                            fill_color=[cell_fill * (len(df) // 2 + 1)][:len(df)],
+                            font=dict(color=cell_font_color, size=12),
+                            align='left',
+                            height=35
+                        )
+                    )])
+
+                    fig.update_layout(
+                        title=dict(text=table_def["title"], font=dict(size=18, color=theme["text_color"])),
+                        paper_bgcolor=theme["chart_bg"],
+                        margin=dict(l=20, r=20, t=60, b=20)
+                    )
+
+                    session["visualizations"].append({
+                        "id": table_def["id"],
+                        "type": "data_table",
+                        "title": table_def["title"],
+                        "figure": fig,
+                        "data": df.to_dict(orient="records"),
+                        "is_table": True
+                    })
+                    results["tables_created"] += 1
+
+                except Exception as e:
+                    results["errors"].append(f"Table {table_def['id']}: {str(e)}")
+
+        # Generate the dashboard
+        if results["kpis_created"] > 0 or results["charts_created"] > 0:
+            dashboard_result = generate_dashboard.invoke({
+                "session_id": session_id,
+                "output_filename": output_filename
+            })
+            return dashboard_result
+        else:
+            return json.dumps({
+                "status": "error",
+                "message": "No visualizations could be created",
+                "errors": results["errors"]
+            }, indent=2)
+
+    except Exception as e:
+        return f"Error generating multi-table dashboard: {str(e)}"
 
 
 # =============================================================================
@@ -2814,10 +3566,17 @@ tool_registry.register(list_tables_for_viz, "dataviz")
 tool_registry.register(get_table_schema_for_viz, "dataviz")
 tool_registry.register(load_schema_relationships, "dataviz")
 
-# Analysis and planning tools
+# Analysis and planning tools (single table)
 tool_registry.register(analyze_data_for_viz, "dataviz")
 tool_registry.register(generate_viz_plan, "dataviz")
 tool_registry.register(set_dashboard_theme, "dataviz")
+
+# Multi-table analysis tools
+tool_registry.register(analyze_multi_table_for_viz, "dataviz")
+tool_registry.register(get_cross_table_insights, "dataviz")
+tool_registry.register(add_cross_table_dataset, "dataviz")
+tool_registry.register(generate_multi_table_viz_plan, "dataviz")
+tool_registry.register(generate_multi_table_dashboard, "dataviz")
 
 # SQL and data collection tools
 tool_registry.register(execute_viz_query, "dataviz")
