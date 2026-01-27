@@ -1003,7 +1003,7 @@ STEP 5: GENERATE DASHBOARD
 → Generates professional HTML dashboard
 
 ═══════════════════════════════════════════════════════════════════════════
-AVAILABLE TOOLS (32 total)
+AVAILABLE TOOLS (40 total)
 ═══════════════════════════════════════════════════════════════════════════
 
 DISCOVERY:
@@ -1027,7 +1027,7 @@ DATA COLLECTION:
 12. execute_viz_query(session_id, sql, cache_key) - Execute and cache query
 13. collect_all_viz_data(session_id) - Collect all planned data
 
-VISUALIZATION CREATION:
+BASIC VISUALIZATION CREATION:
 14. create_kpi_card(session_id, title, sql, format_type, color, icon)
 15. create_bar_chart(session_id, title, sql, x_column, y_column, orientation)
 16. create_line_chart(session_id, title, sql, x_column, y_column)
@@ -1042,15 +1042,33 @@ VISUALIZATION CREATION:
 25. create_stacked_bar_chart(session_id, title, sql, x_column, y_column, color_column)
 26. create_data_table(session_id, title, sql, max_rows)
 
+ADVANCED VISUALIZATION (NEW - Colorful, 3D, Maps):
+27. create_colorful_bar_chart(session_id, title, sql, x_column, y_column, orientation) - Gradient bar chart
+28. create_multi_line_chart(session_id, title, sql, x_column, y_columns, fill_area) - Multiple colorful lines
+29. create_country_map(session_id, title, sql, country_column, value_column, color_scale) - World choropleth map
+30. create_3d_scatter(session_id, title, sql, x_column, y_column, z_column, color_column) - 3D scatter
+31. create_3d_bar_chart(session_id, title, sql, x_column, y_column, z_column) - 3D surface bar
+32. create_bubble_chart(session_id, title, sql, x_column, y_column, size_column, color_column) - Bubble chart
+33. create_waterfall_chart(session_id, title, sql, x_column, y_column) - Waterfall chart
+34. create_funnel_chart(session_id, title, sql, stage_column, value_column) - Funnel chart
+
 DASHBOARD GENERATION:
-27. generate_dashboard(session_id, output_filename) - Create HTML dashboard
-28. generate_dashboard_from_plan(session_id, output_filename) - Auto-generate
+35. generate_dashboard(session_id, output_filename) - Create HTML dashboard
+36. generate_dashboard_from_plan(session_id, output_filename) - Auto-generate
 
 SESSION MANAGEMENT:
-29. get_viz_session_info(session_id) - Session details
-30. list_viz_sessions() - List all sessions
-31. set_dashboard_title(session_id, title) - Set dashboard title
-32. clear_session_visualizations(session_id) - Clear and rebuild
+37. get_viz_session_info(session_id) - Session details
+38. list_viz_sessions() - List all sessions
+39. set_dashboard_title(session_id, title) - Set dashboard title
+40. clear_session_visualizations(session_id) - Clear and rebuild
+
+CHART TYPE PRIORITY (Used by analyze_data_for_viz):
+- PRIORITY 1: Line/Area charts for time series trends
+- PRIORITY 2: Country maps (if country column detected)
+- PRIORITY 3: Colorful bar charts
+- PRIORITY 4: 3D charts (if 3+ numeric columns)
+- PRIORITY 5: Donut charts (LIMITED to 1 only to avoid overuse)
+- PRIORITY 6+: Scatter, stacked bar, treemap, gauge
 
 ═══════════════════════════════════════════════════════════════════════════
 THEMES AND COLORS

@@ -577,99 +577,177 @@ def analyze_data_for_viz(table_name: str, session_id: Optional[str] = None) -> s
             for i, kpi in enumerate(analysis["suggested_kpis"][:6]):
                 kpi["color"] = kpi_colors[i % len(kpi_colors)]
 
-            # Bar charts for categorical with numeric (vertical and horizontal)
-            for cat_col in categorical_cols[:4]:
+            # Detect country columns for map visualization
+            country_keywords = ['country', 'nation', 'region', 'location', 'state', 'territory']
+            country_cols = [col for col in categorical_cols
+                           if any(kw in col.lower() for kw in country_keywords)]
+
+            # Store detected country columns
+            analysis["country_columns"] = country_cols
+
+            # PRIORITY 1: Time Series Charts (Line & Area) - Most important for trends
+            for dt_col in datetime_cols:
+                for num_col in numeric_cols[:4]:
+                    # Multi-color line chart
+                    analysis["suggested_charts"].append({
+                        "type": "line_chart",
+                        "title": f"{num_col.replace('_', ' ').title()} Over Time",
+                        "x_column": dt_col,
+                        "y_column": num_col,
+                        "priority": 1
+                    })
+                    # Area chart for volume trends
+                    analysis["suggested_charts"].append({
+                        "type": "area_chart",
+                        "title": f"{num_col.replace('_', ' ').title()} Trend",
+                        "x_column": dt_col,
+                        "y_column": num_col,
+                        "priority": 1
+                    })
+
+            # Multi-line chart if multiple numeric columns exist
+            if len(numeric_cols) >= 2 and len(datetime_cols) >= 1:
+                y_cols = ",".join(numeric_cols[:3])
+                analysis["suggested_charts"].append({
+                    "type": "multi_line_chart",
+                    "title": "Metrics Comparison Over Time",
+                    "x_column": datetime_cols[0],
+                    "y_columns": y_cols,
+                    "priority": 1
+                })
+
+            # PRIORITY 2: Country Maps (if country column detected)
+            for country_col in country_cols[:1]:  # Limit to 1 map
+                if len(numeric_cols) > 0:
+                    analysis["suggested_charts"].append({
+                        "type": "country_map",
+                        "title": f"{numeric_cols[0].replace('_', ' ').title()} by {country_col.replace('_', ' ').title()}",
+                        "country_column": country_col,
+                        "value_column": numeric_cols[0],
+                        "priority": 2
+                    })
+                else:
+                    analysis["suggested_charts"].append({
+                        "type": "country_map",
+                        "title": f"Distribution by {country_col.replace('_', ' ').title()}",
+                        "country_column": country_col,
+                        "value_column": "count",
+                        "priority": 2
+                    })
+
+            # PRIORITY 3: Colorful Bar Charts
+            for cat_col in categorical_cols[:3]:
                 if df[cat_col].nunique() <= 15:
-                    for num_col in numeric_cols[:3]:
+                    for num_col in numeric_cols[:2]:
+                        # Colorful bar chart (each bar different color)
                         analysis["suggested_charts"].append({
-                            "type": "bar_chart",
-                            "title": f"{num_col} by {cat_col}",
+                            "type": "colorful_bar_chart",
+                            "title": f"{num_col.replace('_', ' ').title()} by {cat_col.replace('_', ' ').title()}",
                             "x_column": cat_col,
                             "y_column": num_col,
-                            "aggregation": "sum"
+                            "aggregation": "sum",
+                            "priority": 3
                         })
-                        # Add horizontal bar for variety
+                        # Horizontal bar for rankings
                         if df[cat_col].nunique() >= 5:
                             analysis["suggested_charts"].append({
                                 "type": "horizontal_bar",
-                                "title": f"Top {cat_col} by {num_col}",
+                                "title": f"Top {cat_col.replace('_', ' ').title()} by {num_col.replace('_', ' ').title()}",
                                 "x_column": num_col,
                                 "y_column": cat_col,
-                                "aggregation": "sum"
+                                "aggregation": "sum",
+                                "priority": 3
                             })
 
-            # Donut/Pie charts for categorical distribution
-            for cat_col in categorical_cols[:3]:
-                if 2 <= df[cat_col].nunique() <= 10:
-                    analysis["suggested_charts"].append({
-                        "type": "donut_chart",
-                        "title": f"{cat_col} Distribution",
-                        "column": cat_col
-                    })
-
-            # Line charts for time series
-            for dt_col in datetime_cols:
-                for num_col in numeric_cols[:3]:
-                    analysis["suggested_charts"].append({
-                        "type": "line_chart",
-                        "title": f"{num_col} over Time",
-                        "x_column": dt_col,
-                        "y_column": num_col
-                    })
-                    # Add area chart variant
-                    analysis["suggested_charts"].append({
-                        "type": "area_chart",
-                        "title": f"{num_col} Trend",
-                        "x_column": dt_col,
-                        "y_column": num_col
-                    })
-
-            # Histograms for numeric distribution
-            for num_col in numeric_cols[:4]:
+            # PRIORITY 4: 3D Charts (if 3+ numeric columns)
+            if len(numeric_cols) >= 3:
                 analysis["suggested_charts"].append({
-                    "type": "histogram",
-                    "title": f"{num_col} Distribution",
-                    "column": num_col
+                    "type": "3d_scatter",
+                    "title": f"3D View: {numeric_cols[0]} vs {numeric_cols[1]} vs {numeric_cols[2]}",
+                    "x_column": numeric_cols[0],
+                    "y_column": numeric_cols[1],
+                    "z_column": numeric_cols[2],
+                    "priority": 4
                 })
 
-            # Scatter plots for numeric correlations
-            if len(numeric_cols) >= 2:
-                for i in range(min(len(numeric_cols)-1, 2)):
-                    analysis["suggested_charts"].append({
-                        "type": "scatter_plot",
-                        "title": f"{numeric_cols[i]} vs {numeric_cols[i+1]}",
-                        "x_column": numeric_cols[i],
-                        "y_column": numeric_cols[i+1]
-                    })
+            # Bubble chart for 3 numeric dimensions
+            if len(numeric_cols) >= 3:
+                analysis["suggested_charts"].append({
+                    "type": "bubble_chart",
+                    "title": f"{numeric_cols[0]} vs {numeric_cols[1]} (size: {numeric_cols[2]})",
+                    "x_column": numeric_cols[0],
+                    "y_column": numeric_cols[1],
+                    "size_column": numeric_cols[2],
+                    "priority": 4
+                })
 
-            # Stacked bar for multiple categories
+            # PRIORITY 5: Donut charts (LIMITED to 1 only)
+            donut_added = False
+            for cat_col in categorical_cols[:2]:
+                if not donut_added and 2 <= df[cat_col].nunique() <= 8:
+                    analysis["suggested_charts"].append({
+                        "type": "donut_chart",
+                        "title": f"{cat_col.replace('_', ' ').title()} Distribution",
+                        "column": cat_col,
+                        "priority": 5
+                    })
+                    donut_added = True
+
+            # PRIORITY 6: Scatter plots for correlations
+            if len(numeric_cols) >= 2:
+                analysis["suggested_charts"].append({
+                    "type": "scatter_plot",
+                    "title": f"{numeric_cols[0]} vs {numeric_cols[1]} Correlation",
+                    "x_column": numeric_cols[0],
+                    "y_column": numeric_cols[1],
+                    "priority": 6
+                })
+
+            # PRIORITY 7: Stacked bar for category breakdowns
             if len(categorical_cols) >= 2 and len(numeric_cols) >= 1:
                 analysis["suggested_charts"].append({
                     "type": "stacked_bar",
-                    "title": f"{numeric_cols[0]} by {categorical_cols[0]} and {categorical_cols[1]}",
+                    "title": f"{numeric_cols[0].replace('_', ' ').title()} by {categorical_cols[0]} and {categorical_cols[1]}",
                     "x_column": categorical_cols[0],
                     "y_column": numeric_cols[0],
-                    "color_column": categorical_cols[1]
+                    "color_column": categorical_cols[1],
+                    "priority": 7
                 })
 
-            # Treemap for hierarchical data
-            for cat_col in categorical_cols[:2]:
+            # PRIORITY 8: Treemap for hierarchical view
+            for cat_col in categorical_cols[:1]:
                 if 3 <= df[cat_col].nunique() <= 20 and len(numeric_cols) > 0:
                     analysis["suggested_charts"].append({
                         "type": "treemap",
-                        "title": f"{cat_col} Breakdown",
+                        "title": f"{cat_col.replace('_', ' ').title()} Breakdown",
                         "labels_column": cat_col,
-                        "values_column": numeric_cols[0]
+                        "values_column": numeric_cols[0],
+                        "priority": 8
                     })
 
-            # Gauge charts for key metrics
+            # PRIORITY 9: Gauge for key metrics
             if len(numeric_cols) >= 1:
                 analysis["suggested_charts"].append({
                     "type": "gauge",
-                    "title": f"Average {numeric_cols[0]}",
+                    "title": f"Average {numeric_cols[0].replace('_', ' ').title()}",
                     "column": numeric_cols[0],
-                    "metric": "avg"
+                    "metric": "avg",
+                    "priority": 9
                 })
+
+            # Waterfall chart if we have sequential data
+            if len(categorical_cols) >= 1 and len(numeric_cols) >= 1:
+                if df[categorical_cols[0]].nunique() <= 10:
+                    analysis["suggested_charts"].append({
+                        "type": "waterfall_chart",
+                        "title": f"{numeric_cols[0].replace('_', ' ').title()} Breakdown",
+                        "x_column": categorical_cols[0],
+                        "y_column": numeric_cols[0],
+                        "priority": 9
+                    })
+
+            # Sort charts by priority
+            analysis["suggested_charts"].sort(key=lambda x: x.get("priority", 99))
 
             # Suggested aggregations
             for cat_col in categorical_cols[:3]:
@@ -889,6 +967,91 @@ def generate_viz_plan(session_id: str, dashboard_title: Optional[str] = None, th
                 else:
                     viz_item["sql"] = f"SELECT SUM({col}) as value FROM {table_name}"
                 viz_item["column"] = col
+
+            # New advanced chart types
+            elif chart["type"] == "colorful_bar":
+                x_col = chart.get("x_column")
+                y_col = chart.get("y_column")
+                agg = chart.get("aggregation", "SUM")
+                viz_item["sql"] = f"SELECT {x_col}, {agg}({y_col}) as {y_col} FROM {table_name} GROUP BY {x_col} ORDER BY {agg}({y_col}) DESC LIMIT 15"
+                viz_item["x_column"] = x_col
+                viz_item["y_column"] = y_col
+                viz_item["orientation"] = chart.get("orientation", "v")
+
+            elif chart["type"] == "multi_line":
+                x_col = chart.get("x_column")
+                y_cols = chart.get("y_columns", [])
+                cols_str = ", ".join(y_cols)
+                viz_item["sql"] = f"SELECT {x_col}, {cols_str} FROM {table_name} ORDER BY {x_col}"
+                viz_item["x_column"] = x_col
+                viz_item["y_columns"] = y_cols
+                viz_item["fill_area"] = chart.get("fill_area", False)
+
+            elif chart["type"] == "country_map":
+                country_col = chart.get("country_column")
+                value_col = chart.get("value_column")
+                agg = chart.get("aggregation", "SUM")
+                viz_item["sql"] = f"SELECT {country_col}, {agg}({value_col}) as {value_col} FROM {table_name} GROUP BY {country_col}"
+                viz_item["country_column"] = country_col
+                viz_item["value_column"] = value_col
+                viz_item["color_scale"] = chart.get("color_scale", "Viridis")
+
+            elif chart["type"] == "3d_scatter":
+                x_col = chart.get("x_column")
+                y_col = chart.get("y_column")
+                z_col = chart.get("z_column")
+                color_col = chart.get("color_column")
+                cols = [x_col, y_col, z_col]
+                if color_col:
+                    cols.append(color_col)
+                cols_str = ", ".join(cols)
+                viz_item["sql"] = f"SELECT {cols_str} FROM {table_name} WHERE {x_col} IS NOT NULL AND {y_col} IS NOT NULL AND {z_col} IS NOT NULL LIMIT 500"
+                viz_item["x_column"] = x_col
+                viz_item["y_column"] = y_col
+                viz_item["z_column"] = z_col
+                viz_item["color_column"] = color_col
+
+            elif chart["type"] == "3d_bar":
+                x_col = chart.get("x_column")
+                y_col = chart.get("y_column")
+                z_col = chart.get("z_column")
+                viz_item["sql"] = f"SELECT {x_col}, {y_col}, SUM({z_col}) as {z_col} FROM {table_name} GROUP BY {x_col}, {y_col} ORDER BY SUM({z_col}) DESC LIMIT 50"
+                viz_item["x_column"] = x_col
+                viz_item["y_column"] = y_col
+                viz_item["z_column"] = z_col
+
+            elif chart["type"] == "bubble_chart":
+                x_col = chart.get("x_column")
+                y_col = chart.get("y_column")
+                size_col = chart.get("size_column")
+                color_col = chart.get("color_column")
+                text_col = chart.get("text_column")
+                cols = [x_col, y_col, size_col]
+                if color_col:
+                    cols.append(color_col)
+                if text_col:
+                    cols.append(text_col)
+                cols_str = ", ".join(cols)
+                viz_item["sql"] = f"SELECT {cols_str} FROM {table_name} WHERE {x_col} IS NOT NULL AND {y_col} IS NOT NULL AND {size_col} IS NOT NULL LIMIT 100"
+                viz_item["x_column"] = x_col
+                viz_item["y_column"] = y_col
+                viz_item["size_column"] = size_col
+                viz_item["color_column"] = color_col
+                viz_item["text_column"] = text_col
+
+            elif chart["type"] == "waterfall":
+                x_col = chart.get("x_column")
+                y_col = chart.get("y_column")
+                viz_item["sql"] = f"SELECT {x_col}, {y_col} FROM {table_name} ORDER BY {x_col} LIMIT 20"
+                viz_item["x_column"] = x_col
+                viz_item["y_column"] = y_col
+
+            elif chart["type"] == "funnel":
+                stage_col = chart.get("stage_column")
+                value_col = chart.get("value_column")
+                viz_item["sql"] = f"SELECT {stage_col}, SUM({value_col}) as {value_col} FROM {table_name} GROUP BY {stage_col} ORDER BY SUM({value_col}) DESC"
+                viz_item["stage_column"] = stage_col
+                viz_item["value_column"] = value_col
 
             chart_section["items"].append(viz_item)
             plan["visualizations"].append(viz_item)
@@ -1578,6 +1741,136 @@ def generate_multi_table_dashboard(session_id: str, output_filename: Optional[st
                         values_col = viz.get("values_column", df.columns[1] if len(df.columns) > 1 else df.columns[0])
                         fig = px.treemap(df, path=[labels_col], values=values_col,
                                         title=viz["title"], color_discrete_sequence=colors)
+
+                    # New advanced chart types for multi-table
+                    elif viz["type"] == "colorful_bar":
+                        x_col = viz.get("x_column", df.columns[0])
+                        y_col = viz.get("y_column", df.columns[1] if len(df.columns) > 1 else df.columns[0])
+                        orientation = viz.get("orientation", "v")
+                        if orientation == "v":
+                            fig = px.bar(df, x=x_col, y=y_col, title=viz["title"],
+                                        color=y_col, color_continuous_scale="Viridis")
+                        else:
+                            fig = px.bar(df, y=x_col, x=y_col, orientation='h',
+                                        title=viz["title"], color=y_col, color_continuous_scale="Viridis")
+
+                    elif viz["type"] == "multi_line":
+                        x_col = viz.get("x_column", df.columns[0])
+                        y_cols = viz.get("y_columns", [df.columns[1]] if len(df.columns) > 1 else [df.columns[0]])
+                        fill_area = viz.get("fill_area", False)
+                        fig = go.Figure()
+                        line_colors = colors[:len(y_cols)]
+                        for i, y_col in enumerate(y_cols):
+                            if y_col in df.columns:
+                                fill_mode = "tozeroy" if fill_area else "none"
+                                fig.add_trace(go.Scatter(
+                                    x=df[x_col], y=df[y_col], name=y_col,
+                                    mode='lines+markers',
+                                    line=dict(color=line_colors[i % len(line_colors)], width=2),
+                                    fill=fill_mode
+                                ))
+                        fig.update_layout(title=viz["title"])
+
+                    elif viz["type"] == "country_map":
+                        country_col = viz.get("country_column", df.columns[0])
+                        value_col = viz.get("value_column", df.columns[1] if len(df.columns) > 1 else df.columns[0])
+                        color_scale = viz.get("color_scale", "Viridis")
+                        country_to_iso = {
+                            'USA': 'USA', 'US': 'USA', 'UNITED STATES': 'USA', 'AMERICA': 'USA',
+                            'UK': 'GBR', 'UNITED KINGDOM': 'GBR', 'GREAT BRITAIN': 'GBR',
+                            'UAE': 'ARE', 'UNITED ARAB EMIRATES': 'ARE', 'DUBAI': 'ARE',
+                            'SAUDI ARABIA': 'SAU', 'INDIA': 'IND', 'CHINA': 'CHN',
+                            'JAPAN': 'JPN', 'GERMANY': 'DEU', 'FRANCE': 'FRA', 'ITALY': 'ITA',
+                            'SPAIN': 'ESP', 'CANADA': 'CAN', 'AUSTRALIA': 'AUS', 'BRAZIL': 'BRA',
+                            'SINGAPORE': 'SGP', 'SWITZERLAND': 'CHE', 'SOUTH AFRICA': 'ZAF',
+                            'QATAR': 'QAT', 'KUWAIT': 'KWT', 'BAHRAIN': 'BHR', 'OMAN': 'OMN'
+                        }
+                        df_map = df.copy()
+                        df_map['iso_code'] = df_map[country_col].str.upper().map(
+                            lambda x: country_to_iso.get(x, x)
+                        )
+                        fig = px.choropleth(
+                            df_map, locations='iso_code', color=value_col,
+                            color_continuous_scale=color_scale, title=viz["title"], hover_name=country_col
+                        )
+                        fig.update_geos(
+                            showcoastlines=True, coastlinecolor="gray",
+                            showland=True, landcolor="rgb(40, 40, 40)",
+                            showocean=True, oceancolor="rgb(20, 30, 50)",
+                            projection_type="natural earth"
+                        )
+
+                    elif viz["type"] == "3d_scatter":
+                        x_col = viz.get("x_column", df.columns[0])
+                        y_col = viz.get("y_column", df.columns[1] if len(df.columns) > 1 else df.columns[0])
+                        z_col = viz.get("z_column", df.columns[2] if len(df.columns) > 2 else df.columns[0])
+                        color_col = viz.get("color_column")
+                        fig = px.scatter_3d(
+                            df, x=x_col, y=y_col, z=z_col,
+                            color=color_col if color_col and color_col in df.columns else None,
+                            title=viz["title"], color_discrete_sequence=colors
+                        )
+                        fig.update_traces(marker=dict(size=8, opacity=0.8))
+
+                    elif viz["type"] == "3d_bar":
+                        x_col = viz.get("x_column", df.columns[0])
+                        y_col = viz.get("y_column", df.columns[1] if len(df.columns) > 1 else df.columns[0])
+                        z_col = viz.get("z_column", df.columns[2] if len(df.columns) > 2 else df.columns[0])
+                        x_vals = df[x_col].unique()
+                        y_vals = df[y_col].unique()
+                        pivot = df.pivot_table(index=y_col, columns=x_col, values=z_col, fill_value=0)
+                        fig = go.Figure(data=[go.Surface(
+                            z=pivot.values, x=list(range(len(x_vals))), y=list(range(len(y_vals))),
+                            colorscale='Viridis'
+                        )])
+                        fig.update_layout(title=viz["title"], scene=dict(
+                            xaxis_title=x_col, yaxis_title=y_col, zaxis_title=z_col
+                        ))
+
+                    elif viz["type"] == "bubble_chart":
+                        x_col = viz.get("x_column", df.columns[0])
+                        y_col = viz.get("y_column", df.columns[1] if len(df.columns) > 1 else df.columns[0])
+                        size_col = viz.get("size_column", df.columns[2] if len(df.columns) > 2 else df.columns[0])
+                        color_col = viz.get("color_column")
+                        text_col = viz.get("text_column")
+                        fig = px.scatter(
+                            df, x=x_col, y=y_col, size=size_col,
+                            color=color_col if color_col and color_col in df.columns else None,
+                            text=text_col if text_col and text_col in df.columns else None,
+                            title=viz["title"], color_discrete_sequence=colors
+                        )
+                        fig.update_traces(marker=dict(opacity=0.7, line=dict(width=1, color='white')))
+
+                    elif viz["type"] == "waterfall":
+                        x_col = viz.get("x_column", df.columns[0])
+                        y_col = viz.get("y_column", df.columns[1] if len(df.columns) > 1 else df.columns[0])
+                        fig = go.Figure(go.Waterfall(
+                            name="", orientation="v", x=df[x_col].tolist(), y=df[y_col].tolist(),
+                            connector={"line": {"color": "rgb(63, 63, 63)"}},
+                            increasing={"marker": {"color": "#10B981"}},
+                            decreasing={"marker": {"color": "#EF4444"}},
+                            totals={"marker": {"color": "#3B82F6"}}
+                        ))
+                        fig.update_layout(title=viz["title"])
+
+                    elif viz["type"] == "funnel":
+                        stage_col = viz.get("stage_column", df.columns[0])
+                        value_col = viz.get("value_column", df.columns[1] if len(df.columns) > 1 else df.columns[0])
+                        fig = px.funnel(df, x=value_col, y=stage_col, title=viz["title"],
+                                       color_discrete_sequence=colors)
+
+                    elif viz["type"] == "gauge":
+                        value = df.iloc[0, 0] if len(df) > 0 else 0
+                        max_val = df.iloc[0, 2] if len(df.columns) >= 3 and len(df) > 0 else value * 1.5
+                        fig = go.Figure(go.Indicator(
+                            mode="gauge+number", value=value, title={'text': viz["title"]},
+                            gauge={'axis': {'range': [0, max_val]}, 'bar': {'color': "#00F5D4"},
+                                   'steps': [
+                                       {'range': [0, max_val * 0.33], 'color': '#EF4444'},
+                                       {'range': [max_val * 0.33, max_val * 0.66], 'color': '#F59E0B'},
+                                       {'range': [max_val * 0.66, max_val], 'color': '#10B981'}
+                                   ]}
+                        ))
 
                     if fig:
                         fig.update_layout(
@@ -2742,6 +3035,745 @@ def create_data_table(session_id: str, title: str, sql: str, max_rows: int = 100
 
 
 # =============================================================================
+# ADVANCED CHART TYPES - Colorful, 3D, and Maps
+# =============================================================================
+
+@tool
+def create_colorful_bar_chart(session_id: str, title: str, sql: str, x_column: str, y_column: str,
+                               orientation: str = "v", color_by_value: bool = True) -> str:
+    """
+    Create a colorful bar chart with gradient colors based on values.
+    Each bar gets a different color from the palette, creating a vibrant look.
+
+    Args:
+        session_id: Visualization session ID
+        title: Chart title
+        sql: SQL query for data
+        x_column: Column for X axis (categories)
+        y_column: Column for Y axis (values)
+        orientation: 'v' for vertical, 'h' for horizontal
+        color_by_value: If True, colors bars by their value (gradient effect)
+
+    Returns:
+        Confirmation with chart ID
+    """
+    try:
+        if not PLOTLY_AVAILABLE:
+            return "Error: Plotly not installed."
+
+        if session_id not in _viz_sessions:
+            return f"Error: Session '{session_id}' not found."
+
+        session = _viz_sessions[session_id]
+        with get_connection() as conn:
+            df = conn.execute(sql).fetchdf()
+
+        colors = _get_color_palette(session.get("color_palette", "dark_friendly"))
+        theme = THEMES.get(session.get("theme", "dark"))
+
+        if color_by_value:
+            # Color each bar differently based on its position
+            bar_colors = [colors[i % len(colors)] for i in range(len(df))]
+
+            if orientation == "h":
+                fig = go.Figure(go.Bar(
+                    y=df[x_column],
+                    x=df[y_column],
+                    orientation='h',
+                    marker=dict(
+                        color=bar_colors,
+                        line=dict(color='rgba(255,255,255,0.3)', width=1)
+                    ),
+                    text=df[y_column],
+                    textposition='outside'
+                ))
+            else:
+                fig = go.Figure(go.Bar(
+                    x=df[x_column],
+                    y=df[y_column],
+                    marker=dict(
+                        color=bar_colors,
+                        line=dict(color='rgba(255,255,255,0.3)', width=1)
+                    ),
+                    text=df[y_column],
+                    textposition='outside'
+                ))
+        else:
+            # Use color scale based on values
+            if orientation == "h":
+                fig = px.bar(df, y=x_column, x=y_column, orientation='h',
+                            title=title, color=y_column,
+                            color_continuous_scale='Viridis')
+            else:
+                fig = px.bar(df, x=x_column, y=y_column,
+                            title=title, color=y_column,
+                            color_continuous_scale='Viridis')
+
+        fig.update_layout(
+            title=dict(text=title, font=dict(size=18, color=theme["text_color"])),
+            template="plotly_dark" if session.get("theme") == "dark" else "plotly_white",
+            paper_bgcolor=theme["chart_bg"],
+            plot_bgcolor=theme["chart_bg"],
+            font=dict(color=theme["text_color"]),
+            showlegend=False
+        )
+
+        chart_id = f"colorbar_{len(session['visualizations']) + 1}"
+        session["visualizations"].append({
+            "id": chart_id,
+            "type": "colorful_bar_chart",
+            "title": title,
+            "figure": fig,
+            "data": df.to_dict(orient="records")
+        })
+
+        return json.dumps({
+            "status": "success",
+            "chart_id": chart_id,
+            "type": "colorful_bar_chart",
+            "title": title,
+            "data_rows": len(df)
+        }, indent=2)
+
+    except Exception as e:
+        return f"Error creating colorful bar chart: {str(e)}"
+
+
+@tool
+def create_multi_line_chart(session_id: str, title: str, sql: str, x_column: str,
+                            y_columns: str, fill_area: bool = False) -> str:
+    """
+    Create a multi-line chart with different colors for each line.
+    Great for comparing multiple metrics over time.
+
+    Args:
+        session_id: Visualization session ID
+        title: Chart title
+        sql: SQL query for data
+        x_column: Column for X axis (typically date/time)
+        y_columns: Comma-separated column names for Y axis lines (e.g., "sales,revenue,profit")
+        fill_area: If True, fills area under each line
+
+    Returns:
+        Confirmation with chart ID
+    """
+    try:
+        if not PLOTLY_AVAILABLE:
+            return "Error: Plotly not installed."
+
+        if session_id not in _viz_sessions:
+            return f"Error: Session '{session_id}' not found."
+
+        session = _viz_sessions[session_id]
+        with get_connection() as conn:
+            df = conn.execute(sql).fetchdf()
+
+        colors = _get_color_palette(session.get("color_palette", "dark_friendly"))
+        theme = THEMES.get(session.get("theme", "dark"))
+
+        y_cols = [col.strip() for col in y_columns.split(",")]
+
+        fig = go.Figure()
+
+        for i, y_col in enumerate(y_cols):
+            if y_col in df.columns:
+                color = colors[i % len(colors)]
+                if fill_area:
+                    fig.add_trace(go.Scatter(
+                        x=df[x_column],
+                        y=df[y_col],
+                        mode='lines',
+                        name=y_col.replace('_', ' ').title(),
+                        line=dict(color=color, width=2),
+                        fill='tonexty' if i > 0 else 'tozeroy',
+                        fillcolor=color.replace(')', ', 0.3)').replace('rgb', 'rgba') if 'rgb' in color else f"rgba{tuple(int(color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4)) + (0.3,)}"
+                    ))
+                else:
+                    fig.add_trace(go.Scatter(
+                        x=df[x_column],
+                        y=df[y_col],
+                        mode='lines+markers',
+                        name=y_col.replace('_', ' ').title(),
+                        line=dict(color=color, width=3),
+                        marker=dict(size=8, color=color)
+                    ))
+
+        fig.update_layout(
+            title=dict(text=title, font=dict(size=18, color=theme["text_color"])),
+            template="plotly_dark" if session.get("theme") == "dark" else "plotly_white",
+            paper_bgcolor=theme["chart_bg"],
+            plot_bgcolor=theme["chart_bg"],
+            font=dict(color=theme["text_color"]),
+            legend=dict(font=dict(color=theme["text_color"])),
+            hovermode='x unified'
+        )
+
+        chart_id = f"multiline_{len(session['visualizations']) + 1}"
+        session["visualizations"].append({
+            "id": chart_id,
+            "type": "multi_line_chart",
+            "title": title,
+            "figure": fig,
+            "data": df.to_dict(orient="records")
+        })
+
+        return json.dumps({
+            "status": "success",
+            "chart_id": chart_id,
+            "type": "multi_line_chart",
+            "title": title,
+            "data_rows": len(df),
+            "lines": y_cols
+        }, indent=2)
+
+    except Exception as e:
+        return f"Error creating multi-line chart: {str(e)}"
+
+
+@tool
+def create_country_map(session_id: str, title: str, sql: str, country_column: str,
+                       value_column: str, color_scale: str = "Viridis") -> str:
+    """
+    Create a choropleth map visualization showing data by country.
+    Automatically detects and maps country names to their geographic locations.
+
+    Args:
+        session_id: Visualization session ID
+        title: Chart title
+        sql: SQL query for data (should return country and value columns)
+        country_column: Column containing country names (e.g., 'COUNTRY', 'country_name')
+        value_column: Column containing values to display (e.g., 'count', 'total_value')
+        color_scale: Color scale - 'Viridis', 'Blues', 'Reds', 'Greens', 'Plasma', 'Turbo'
+
+    Returns:
+        Confirmation with chart ID
+    """
+    try:
+        if not PLOTLY_AVAILABLE:
+            return "Error: Plotly not installed."
+
+        if session_id not in _viz_sessions:
+            return f"Error: Session '{session_id}' not found."
+
+        session = _viz_sessions[session_id]
+        theme = THEMES.get(session.get("theme", "dark"))
+
+        with get_connection() as conn:
+            df = conn.execute(sql).fetchdf()
+
+        # Country name to ISO code mapping (common countries)
+        country_to_iso = {
+            'USA': 'USA', 'US': 'USA', 'UNITED STATES': 'USA', 'UNITED STATES OF AMERICA': 'USA',
+            'UK': 'GBR', 'UNITED KINGDOM': 'GBR', 'GREAT BRITAIN': 'GBR', 'ENGLAND': 'GBR',
+            'UAE': 'ARE', 'UNITED ARAB EMIRATES': 'ARE', 'DUBAI': 'ARE', 'ABU DHABI': 'ARE',
+            'SAUDI ARABIA': 'SAU', 'KSA': 'SAU', 'SAUDI': 'SAU',
+            'INDIA': 'IND', 'CHINA': 'CHN', 'JAPAN': 'JPN', 'GERMANY': 'DEU',
+            'FRANCE': 'FRA', 'ITALY': 'ITA', 'SPAIN': 'ESP', 'CANADA': 'CAN',
+            'AUSTRALIA': 'AUS', 'BRAZIL': 'BRA', 'MEXICO': 'MEX', 'RUSSIA': 'RUS',
+            'SOUTH KOREA': 'KOR', 'KOREA': 'KOR', 'NETHERLANDS': 'NLD', 'SWITZERLAND': 'CHE',
+            'SWEDEN': 'SWE', 'NORWAY': 'NOR', 'DENMARK': 'DNK', 'FINLAND': 'FIN',
+            'IRELAND': 'IRL', 'BELGIUM': 'BEL', 'AUSTRIA': 'AUT', 'PORTUGAL': 'PRT',
+            'SINGAPORE': 'SGP', 'HONG KONG': 'HKG', 'TAIWAN': 'TWN', 'MALAYSIA': 'MYS',
+            'INDONESIA': 'IDN', 'THAILAND': 'THA', 'VIETNAM': 'VNM', 'PHILIPPINES': 'PHL',
+            'EGYPT': 'EGY', 'SOUTH AFRICA': 'ZAF', 'NIGERIA': 'NGA', 'KENYA': 'KEN',
+            'MOROCCO': 'MAR', 'ISRAEL': 'ISR', 'TURKEY': 'TUR', 'POLAND': 'POL',
+            'CZECH REPUBLIC': 'CZE', 'HUNGARY': 'HUN', 'GREECE': 'GRC', 'ROMANIA': 'ROU',
+            'NEW ZEALAND': 'NZL', 'ARGENTINA': 'ARG', 'CHILE': 'CHL', 'COLOMBIA': 'COL',
+            'PERU': 'PER', 'VENEZUELA': 'VEN', 'QATAR': 'QAT', 'KUWAIT': 'KWT',
+            'BAHRAIN': 'BHR', 'OMAN': 'OMN', 'JORDAN': 'JOR', 'LEBANON': 'LBN',
+            'PAKISTAN': 'PAK', 'BANGLADESH': 'BGD', 'SRI LANKA': 'LKA', 'NEPAL': 'NPL'
+        }
+
+        # Map country names to ISO codes
+        df['iso_code'] = df[country_column].str.upper().map(country_to_iso)
+
+        # For countries not in mapping, try to use as-is (might be ISO codes already)
+        df.loc[df['iso_code'].isna(), 'iso_code'] = df.loc[df['iso_code'].isna(), country_column].str.upper()
+
+        fig = px.choropleth(
+            df,
+            locations='iso_code',
+            color=value_column,
+            hover_name=country_column,
+            color_continuous_scale=color_scale,
+            title=title
+        )
+
+        # Style for dark/light theme
+        if session.get("theme") == "dark":
+            geo_bgcolor = '#1E293B'
+            land_color = '#334155'
+            ocean_color = '#0F172A'
+        else:
+            geo_bgcolor = '#FFFFFF'
+            land_color = '#E2E8F0'
+            ocean_color = '#DBEAFE'
+
+        fig.update_geos(
+            showcoastlines=True,
+            coastlinecolor='rgba(255,255,255,0.3)',
+            showland=True,
+            landcolor=land_color,
+            showocean=True,
+            oceancolor=ocean_color,
+            showlakes=True,
+            lakecolor=ocean_color,
+            showcountries=True,
+            countrycolor='rgba(255,255,255,0.2)',
+            bgcolor=geo_bgcolor
+        )
+
+        fig.update_layout(
+            title=dict(text=title, font=dict(size=18, color=theme["text_color"])),
+            paper_bgcolor=theme["chart_bg"],
+            font=dict(color=theme["text_color"]),
+            geo=dict(bgcolor=geo_bgcolor),
+            margin=dict(l=0, r=0, t=60, b=0)
+        )
+
+        chart_id = f"map_{len(session['visualizations']) + 1}"
+        session["visualizations"].append({
+            "id": chart_id,
+            "type": "country_map",
+            "title": title,
+            "figure": fig,
+            "data": df.to_dict(orient="records")
+        })
+
+        return json.dumps({
+            "status": "success",
+            "chart_id": chart_id,
+            "type": "country_map",
+            "title": title,
+            "countries_mapped": len(df),
+            "countries": df[country_column].tolist()
+        }, indent=2)
+
+    except Exception as e:
+        return f"Error creating country map: {str(e)}"
+
+
+@tool
+def create_3d_scatter(session_id: str, title: str, sql: str, x_column: str, y_column: str,
+                      z_column: str, color_column: Optional[str] = None,
+                      size_column: Optional[str] = None) -> str:
+    """
+    Create a 3D scatter plot for visualizing relationships between three numeric variables.
+
+    Args:
+        session_id: Visualization session ID
+        title: Chart title
+        sql: SQL query for data
+        x_column: Column for X axis
+        y_column: Column for Y axis
+        z_column: Column for Z axis (depth)
+        color_column: Optional column for point colors
+        size_column: Optional column for point sizes
+
+    Returns:
+        Confirmation with chart ID
+    """
+    try:
+        if not PLOTLY_AVAILABLE:
+            return "Error: Plotly not installed."
+
+        if session_id not in _viz_sessions:
+            return f"Error: Session '{session_id}' not found."
+
+        session = _viz_sessions[session_id]
+        with get_connection() as conn:
+            df = conn.execute(sql).fetchdf()
+
+        colors = _get_color_palette(session.get("color_palette", "dark_friendly"))
+        theme = THEMES.get(session.get("theme", "dark"))
+
+        fig = px.scatter_3d(
+            df,
+            x=x_column,
+            y=y_column,
+            z=z_column,
+            color=color_column if color_column and color_column in df.columns else None,
+            size=size_column if size_column and size_column in df.columns else None,
+            title=title,
+            color_discrete_sequence=colors
+        )
+
+        fig.update_layout(
+            title=dict(text=title, font=dict(size=18, color=theme["text_color"])),
+            paper_bgcolor=theme["chart_bg"],
+            font=dict(color=theme["text_color"]),
+            scene=dict(
+                xaxis=dict(backgroundcolor=theme["card_bg"], gridcolor=theme["border_color"]),
+                yaxis=dict(backgroundcolor=theme["card_bg"], gridcolor=theme["border_color"]),
+                zaxis=dict(backgroundcolor=theme["card_bg"], gridcolor=theme["border_color"])
+            )
+        )
+
+        chart_id = f"scatter3d_{len(session['visualizations']) + 1}"
+        session["visualizations"].append({
+            "id": chart_id,
+            "type": "3d_scatter",
+            "title": title,
+            "figure": fig,
+            "data": df.to_dict(orient="records")
+        })
+
+        return json.dumps({
+            "status": "success",
+            "chart_id": chart_id,
+            "type": "3d_scatter",
+            "title": title,
+            "data_rows": len(df)
+        }, indent=2)
+
+    except Exception as e:
+        return f"Error creating 3D scatter: {str(e)}"
+
+
+@tool
+def create_3d_bar_chart(session_id: str, title: str, sql: str, x_column: str,
+                        y_column: str, z_column: str) -> str:
+    """
+    Create a 3D bar chart for visualizing data with three dimensions.
+
+    Args:
+        session_id: Visualization session ID
+        title: Chart title
+        sql: SQL query for data
+        x_column: Column for X axis (category 1)
+        y_column: Column for Y axis (category 2)
+        z_column: Column for Z axis (values/height)
+
+    Returns:
+        Confirmation with chart ID
+    """
+    try:
+        if not PLOTLY_AVAILABLE:
+            return "Error: Plotly not installed."
+
+        if session_id not in _viz_sessions:
+            return f"Error: Session '{session_id}' not found."
+
+        session = _viz_sessions[session_id]
+        with get_connection() as conn:
+            df = conn.execute(sql).fetchdf()
+
+        colors = _get_color_palette(session.get("color_palette", "dark_friendly"))
+        theme = THEMES.get(session.get("theme", "dark"))
+
+        # Create 3D bar chart using mesh3d for each bar
+        fig = go.Figure()
+
+        x_vals = df[x_column].unique()
+        y_vals = df[y_column].unique() if y_column != z_column else [0]
+
+        for i, (_, row) in enumerate(df.iterrows()):
+            x_idx = list(x_vals).index(row[x_column]) if row[x_column] in x_vals else i
+            y_idx = list(y_vals).index(row[y_column]) if y_column != z_column and row[y_column] in y_vals else 0
+            z_val = row[z_column]
+
+            color = colors[i % len(colors)]
+
+            # Create a simple bar as a 3D surface
+            fig.add_trace(go.Bar3d(
+                x=[x_idx],
+                y=[y_idx],
+                z=[z_val],
+                marker=dict(color=color)
+            ) if hasattr(go, 'Bar3d') else go.Scatter3d(
+                x=[x_idx, x_idx],
+                y=[y_idx, y_idx],
+                z=[0, z_val],
+                mode='lines',
+                line=dict(color=color, width=15),
+                showlegend=False
+            ))
+
+        # Alternative: use scatter3d with lines to simulate bars
+        fig = go.Figure()
+        for i, (_, row) in enumerate(df.iterrows()):
+            color = colors[i % len(colors)]
+            x_idx = i
+            z_val = float(row[z_column]) if pd.notna(row[z_column]) else 0
+
+            # Create vertical line to simulate bar
+            fig.add_trace(go.Scatter3d(
+                x=[x_idx, x_idx],
+                y=[0, 0],
+                z=[0, z_val],
+                mode='lines',
+                line=dict(color=color, width=20),
+                name=str(row[x_column]),
+                showlegend=True
+            ))
+
+        fig.update_layout(
+            title=dict(text=title, font=dict(size=18, color=theme["text_color"])),
+            paper_bgcolor=theme["chart_bg"],
+            font=dict(color=theme["text_color"]),
+            scene=dict(
+                xaxis=dict(title=x_column, backgroundcolor=theme["card_bg"]),
+                yaxis=dict(title=y_column if y_column != z_column else "", backgroundcolor=theme["card_bg"]),
+                zaxis=dict(title=z_column, backgroundcolor=theme["card_bg"])
+            )
+        )
+
+        chart_id = f"bar3d_{len(session['visualizations']) + 1}"
+        session["visualizations"].append({
+            "id": chart_id,
+            "type": "3d_bar_chart",
+            "title": title,
+            "figure": fig,
+            "data": df.to_dict(orient="records")
+        })
+
+        return json.dumps({
+            "status": "success",
+            "chart_id": chart_id,
+            "type": "3d_bar_chart",
+            "title": title,
+            "data_rows": len(df)
+        }, indent=2)
+
+    except Exception as e:
+        return f"Error creating 3D bar chart: {str(e)}"
+
+
+@tool
+def create_bubble_chart(session_id: str, title: str, sql: str, x_column: str, y_column: str,
+                        size_column: str, color_column: Optional[str] = None,
+                        text_column: Optional[str] = None) -> str:
+    """
+    Create a bubble chart where bubble size represents a third dimension.
+    Great for showing relationships between three variables.
+
+    Args:
+        session_id: Visualization session ID
+        title: Chart title
+        sql: SQL query for data
+        x_column: Column for X axis
+        y_column: Column for Y axis
+        size_column: Column for bubble sizes
+        color_column: Optional column for bubble colors
+        text_column: Optional column for bubble labels
+
+    Returns:
+        Confirmation with chart ID
+    """
+    try:
+        if not PLOTLY_AVAILABLE:
+            return "Error: Plotly not installed."
+
+        if session_id not in _viz_sessions:
+            return f"Error: Session '{session_id}' not found."
+
+        session = _viz_sessions[session_id]
+        with get_connection() as conn:
+            df = conn.execute(sql).fetchdf()
+
+        colors = _get_color_palette(session.get("color_palette", "dark_friendly"))
+        theme = THEMES.get(session.get("theme", "dark"))
+
+        # Normalize size for better visualization
+        size_values = df[size_column].fillna(0)
+        max_size = size_values.max() if size_values.max() > 0 else 1
+        normalized_size = (size_values / max_size * 50) + 10
+
+        fig = px.scatter(
+            df,
+            x=x_column,
+            y=y_column,
+            size=normalized_size,
+            color=color_column if color_column and color_column in df.columns else None,
+            text=text_column if text_column and text_column in df.columns else None,
+            title=title,
+            color_discrete_sequence=colors,
+            size_max=60
+        )
+
+        fig.update_traces(
+            marker=dict(
+                line=dict(width=2, color='rgba(255,255,255,0.5)'),
+                opacity=0.7
+            )
+        )
+
+        fig.update_layout(
+            title=dict(text=title, font=dict(size=18, color=theme["text_color"])),
+            template="plotly_dark" if session.get("theme") == "dark" else "plotly_white",
+            paper_bgcolor=theme["chart_bg"],
+            plot_bgcolor=theme["chart_bg"],
+            font=dict(color=theme["text_color"])
+        )
+
+        chart_id = f"bubble_{len(session['visualizations']) + 1}"
+        session["visualizations"].append({
+            "id": chart_id,
+            "type": "bubble_chart",
+            "title": title,
+            "figure": fig,
+            "data": df.to_dict(orient="records")
+        })
+
+        return json.dumps({
+            "status": "success",
+            "chart_id": chart_id,
+            "type": "bubble_chart",
+            "title": title,
+            "data_rows": len(df)
+        }, indent=2)
+
+    except Exception as e:
+        return f"Error creating bubble chart: {str(e)}"
+
+
+@tool
+def create_waterfall_chart(session_id: str, title: str, sql: str, x_column: str,
+                           y_column: str, measure_column: Optional[str] = None) -> str:
+    """
+    Create a waterfall chart showing how values increase/decrease from an initial value.
+    Great for financial data, showing contributions to a total.
+
+    Args:
+        session_id: Visualization session ID
+        title: Chart title
+        sql: SQL query for data
+        x_column: Column for X axis (categories)
+        y_column: Column for Y axis (values)
+        measure_column: Optional column specifying 'relative', 'total', or 'absolute'
+
+    Returns:
+        Confirmation with chart ID
+    """
+    try:
+        if not PLOTLY_AVAILABLE:
+            return "Error: Plotly not installed."
+
+        if session_id not in _viz_sessions:
+            return f"Error: Session '{session_id}' not found."
+
+        session = _viz_sessions[session_id]
+        with get_connection() as conn:
+            df = conn.execute(sql).fetchdf()
+
+        theme = THEMES.get(session.get("theme", "dark"))
+
+        if measure_column and measure_column in df.columns:
+            measures = df[measure_column].tolist()
+        else:
+            # Auto-detect: first and last are totals, rest are relative
+            measures = ['absolute'] + ['relative'] * (len(df) - 2) + ['total'] if len(df) > 2 else ['relative'] * len(df)
+
+        fig = go.Figure(go.Waterfall(
+            x=df[x_column],
+            y=df[y_column],
+            measure=measures,
+            textposition="outside",
+            connector=dict(line=dict(color="rgba(255,255,255,0.3)")),
+            increasing=dict(marker=dict(color="#10B981")),  # Green for increase
+            decreasing=dict(marker=dict(color="#EF4444")),  # Red for decrease
+            totals=dict(marker=dict(color="#3B82F6"))  # Blue for totals
+        ))
+
+        fig.update_layout(
+            title=dict(text=title, font=dict(size=18, color=theme["text_color"])),
+            template="plotly_dark" if session.get("theme") == "dark" else "plotly_white",
+            paper_bgcolor=theme["chart_bg"],
+            plot_bgcolor=theme["chart_bg"],
+            font=dict(color=theme["text_color"]),
+            showlegend=False
+        )
+
+        chart_id = f"waterfall_{len(session['visualizations']) + 1}"
+        session["visualizations"].append({
+            "id": chart_id,
+            "type": "waterfall_chart",
+            "title": title,
+            "figure": fig,
+            "data": df.to_dict(orient="records")
+        })
+
+        return json.dumps({
+            "status": "success",
+            "chart_id": chart_id,
+            "type": "waterfall_chart",
+            "title": title,
+            "data_rows": len(df)
+        }, indent=2)
+
+    except Exception as e:
+        return f"Error creating waterfall chart: {str(e)}"
+
+
+@tool
+def create_funnel_chart(session_id: str, title: str, sql: str, stage_column: str,
+                        value_column: str) -> str:
+    """
+    Create a funnel chart showing stages in a process with decreasing values.
+    Great for conversion funnels, sales pipelines, etc.
+
+    Args:
+        session_id: Visualization session ID
+        title: Chart title
+        sql: SQL query for data (should return stages and values in order)
+        stage_column: Column containing stage names
+        value_column: Column containing values for each stage
+
+    Returns:
+        Confirmation with chart ID
+    """
+    try:
+        if not PLOTLY_AVAILABLE:
+            return "Error: Plotly not installed."
+
+        if session_id not in _viz_sessions:
+            return f"Error: Session '{session_id}' not found."
+
+        session = _viz_sessions[session_id]
+        with get_connection() as conn:
+            df = conn.execute(sql).fetchdf()
+
+        colors = _get_color_palette(session.get("color_palette", "dark_friendly"))
+        theme = THEMES.get(session.get("theme", "dark"))
+
+        fig = go.Figure(go.Funnel(
+            y=df[stage_column],
+            x=df[value_column],
+            textposition="inside",
+            textinfo="value+percent initial",
+            marker=dict(color=colors[:len(df)]),
+            connector=dict(line=dict(color="rgba(255,255,255,0.3)", width=2))
+        ))
+
+        fig.update_layout(
+            title=dict(text=title, font=dict(size=18, color=theme["text_color"])),
+            paper_bgcolor=theme["chart_bg"],
+            font=dict(color=theme["text_color"]),
+            funnelmode="stack"
+        )
+
+        chart_id = f"funnel_{len(session['visualizations']) + 1}"
+        session["visualizations"].append({
+            "id": chart_id,
+            "type": "funnel_chart",
+            "title": title,
+            "figure": fig,
+            "data": df.to_dict(orient="records")
+        })
+
+        return json.dumps({
+            "status": "success",
+            "chart_id": chart_id,
+            "type": "funnel_chart",
+            "title": title,
+            "data_rows": len(df)
+        }, indent=2)
+
+    except Exception as e:
+        return f"Error creating funnel chart: {str(e)}"
+
+
+# =============================================================================
 # DASHBOARD GENERATION TOOLS
 # =============================================================================
 
@@ -3170,19 +4202,30 @@ def generate_dashboard(session_id: str, output_filename: Optional[str] = None) -
         session["dashboard_generated"] = True
         session["dashboard_path"] = output_path
 
-        # Get absolute path
+        # Get absolute path and convert to proper file URL format
         abs_path = os.path.abspath(output_path)
+
+        # Convert Windows path to proper file:// URL format
+        if os.name == 'nt':
+            # Replace backslashes with forward slashes for URL
+            url_path = abs_path.replace('\\', '/')
+            file_url = f"file:///{url_path}"
+            open_command = f'start "" "{abs_path}"'
+        else:
+            file_url = f"file://{abs_path}"
+            open_command = f"open {abs_path}"
 
         return json.dumps({
             "status": "success",
-            "dashboard_path": abs_path,
+            "dashboard_path": abs_path.replace('\\', '/'),  # Use forward slashes for display
+            "file_url": file_url,
             "filename": output_filename,
             "theme": theme_name,
             "kpi_count": len(kpis),
             "chart_count": len(charts),
             "table_count": len(tables),
             "message": f"Professional dashboard generated successfully! Open the HTML file in a browser to view.",
-            "open_command": f"start {abs_path}" if os.name == 'nt' else f"open {abs_path}"
+            "open_command": open_command
         }, indent=2)
 
     except Exception as e:
@@ -3323,6 +4366,152 @@ def generate_dashboard_from_plan(session_id: str, output_filename: Optional[str]
                                 ],
                             }
                         ))
+
+                    # New advanced chart types
+                    elif viz["type"] == "colorful_bar":
+                        x_col = viz.get("x_column")
+                        y_col = viz.get("y_column")
+                        orientation = viz.get("orientation", "v")
+                        # Create gradient colors based on values
+                        if orientation == "v":
+                            fig = px.bar(df, x=x_col, y=y_col, title=viz["title"],
+                                        color=y_col, color_continuous_scale="Viridis")
+                        else:
+                            fig = px.bar(df, y=x_col, x=y_col, orientation='h',
+                                        title=viz["title"], color=y_col, color_continuous_scale="Viridis")
+
+                    elif viz["type"] == "multi_line":
+                        x_col = viz.get("x_column")
+                        y_cols = viz.get("y_columns", [])
+                        fill_area = viz.get("fill_area", False)
+                        fig = go.Figure()
+                        line_colors = colors[:len(y_cols)]
+                        for i, y_col in enumerate(y_cols):
+                            if y_col in df.columns:
+                                fill_mode = "tozeroy" if fill_area else "none"
+                                fig.add_trace(go.Scatter(
+                                    x=df[x_col], y=df[y_col], name=y_col,
+                                    mode='lines+markers',
+                                    line=dict(color=line_colors[i % len(line_colors)], width=2),
+                                    fill=fill_mode
+                                ))
+                        fig.update_layout(title=viz["title"])
+
+                    elif viz["type"] == "country_map":
+                        country_col = viz.get("country_column")
+                        value_col = viz.get("value_column")
+                        color_scale = viz.get("color_scale", "Viridis")
+                        # Country to ISO mapping
+                        country_to_iso = {
+                            'USA': 'USA', 'US': 'USA', 'UNITED STATES': 'USA', 'AMERICA': 'USA',
+                            'UK': 'GBR', 'UNITED KINGDOM': 'GBR', 'GREAT BRITAIN': 'GBR', 'ENGLAND': 'GBR',
+                            'UAE': 'ARE', 'UNITED ARAB EMIRATES': 'ARE', 'DUBAI': 'ARE', 'ABU DHABI': 'ARE',
+                            'SAUDI ARABIA': 'SAU', 'KSA': 'SAU', 'INDIA': 'IND', 'CHINA': 'CHN',
+                            'JAPAN': 'JPN', 'GERMANY': 'DEU', 'FRANCE': 'FRA', 'ITALY': 'ITA',
+                            'SPAIN': 'ESP', 'CANADA': 'CAN', 'AUSTRALIA': 'AUS', 'BRAZIL': 'BRA',
+                            'MEXICO': 'MEX', 'RUSSIA': 'RUS', 'SOUTH KOREA': 'KOR', 'SINGAPORE': 'SGP',
+                            'SWITZERLAND': 'CHE', 'NETHERLANDS': 'NLD', 'SWEDEN': 'SWE', 'NORWAY': 'NOR',
+                            'FINLAND': 'FIN', 'DENMARK': 'DNK', 'IRELAND': 'IRL', 'PORTUGAL': 'PRT',
+                            'GREECE': 'GRC', 'TURKEY': 'TUR', 'POLAND': 'POL', 'BELGIUM': 'BEL',
+                            'AUSTRIA': 'AUT', 'CZECH': 'CZE', 'CZECHIA': 'CZE', 'CZECH REPUBLIC': 'CZE',
+                            'SOUTH AFRICA': 'ZAF', 'EGYPT': 'EGY', 'NIGERIA': 'NGA', 'KENYA': 'KEN',
+                            'INDONESIA': 'IDN', 'MALAYSIA': 'MYS', 'THAILAND': 'THA', 'VIETNAM': 'VNM',
+                            'PHILIPPINES': 'PHL', 'HONG KONG': 'HKG', 'TAIWAN': 'TWN', 'NEW ZEALAND': 'NZL',
+                            'ARGENTINA': 'ARG', 'CHILE': 'CHL', 'COLOMBIA': 'COL', 'PERU': 'PER',
+                            'QATAR': 'QAT', 'KUWAIT': 'KWT', 'BAHRAIN': 'BHR', 'OMAN': 'OMN', 'JORDAN': 'JOR',
+                            'ISRAEL': 'ISR', 'PAKISTAN': 'PAK', 'BANGLADESH': 'BGD', 'SRI LANKA': 'LKA'
+                        }
+                        df_map = df.copy()
+                        df_map['iso_code'] = df_map[country_col].str.upper().map(
+                            lambda x: country_to_iso.get(x, x)
+                        )
+                        fig = px.choropleth(
+                            df_map, locations='iso_code', color=value_col,
+                            color_continuous_scale=color_scale,
+                            title=viz["title"],
+                            hover_name=country_col
+                        )
+                        fig.update_geos(
+                            showcoastlines=True, coastlinecolor="gray",
+                            showland=True, landcolor="rgb(40, 40, 40)",
+                            showocean=True, oceancolor="rgb(20, 30, 50)",
+                            showlakes=True, lakecolor="rgb(20, 30, 50)",
+                            projection_type="natural earth"
+                        )
+
+                    elif viz["type"] == "3d_scatter":
+                        x_col = viz.get("x_column")
+                        y_col = viz.get("y_column")
+                        z_col = viz.get("z_column")
+                        color_col = viz.get("color_column")
+                        fig = px.scatter_3d(
+                            df, x=x_col, y=y_col, z=z_col,
+                            color=color_col if color_col and color_col in df.columns else None,
+                            title=viz["title"],
+                            color_discrete_sequence=colors
+                        )
+                        fig.update_traces(marker=dict(size=8, opacity=0.8))
+
+                    elif viz["type"] == "3d_bar":
+                        x_col = viz.get("x_column")
+                        y_col = viz.get("y_column")
+                        z_col = viz.get("z_column")
+                        # Create 3D surface as bar chart approximation
+                        x_vals = df[x_col].unique()
+                        y_vals = df[y_col].unique()
+                        pivot = df.pivot_table(index=y_col, columns=x_col, values=z_col, fill_value=0)
+                        fig = go.Figure(data=[go.Surface(
+                            z=pivot.values,
+                            x=list(range(len(x_vals))),
+                            y=list(range(len(y_vals))),
+                            colorscale='Viridis'
+                        )])
+                        fig.update_layout(
+                            title=viz["title"],
+                            scene=dict(
+                                xaxis_title=x_col,
+                                yaxis_title=y_col,
+                                zaxis_title=z_col
+                            )
+                        )
+
+                    elif viz["type"] == "bubble_chart":
+                        x_col = viz.get("x_column")
+                        y_col = viz.get("y_column")
+                        size_col = viz.get("size_column")
+                        color_col = viz.get("color_column")
+                        text_col = viz.get("text_column")
+                        fig = px.scatter(
+                            df, x=x_col, y=y_col, size=size_col,
+                            color=color_col if color_col and color_col in df.columns else None,
+                            text=text_col if text_col and text_col in df.columns else None,
+                            title=viz["title"],
+                            color_discrete_sequence=colors
+                        )
+                        fig.update_traces(marker=dict(opacity=0.7, line=dict(width=1, color='white')))
+
+                    elif viz["type"] == "waterfall":
+                        x_col = viz.get("x_column")
+                        y_col = viz.get("y_column")
+                        fig = go.Figure(go.Waterfall(
+                            name="", orientation="v",
+                            x=df[x_col].tolist(),
+                            y=df[y_col].tolist(),
+                            connector={"line": {"color": "rgb(63, 63, 63)"}},
+                            increasing={"marker": {"color": "#10B981"}},
+                            decreasing={"marker": {"color": "#EF4444"}},
+                            totals={"marker": {"color": "#3B82F6"}}
+                        ))
+                        fig.update_layout(title=viz["title"])
+
+                    elif viz["type"] == "funnel":
+                        stage_col = viz.get("stage_column")
+                        value_col = viz.get("value_column")
+                        fig = px.funnel(
+                            df, x=value_col, y=stage_col,
+                            title=viz["title"],
+                            color_discrete_sequence=colors
+                        )
 
                     if fig:
                         fig.update_layout(
@@ -3596,6 +4785,16 @@ tool_registry.register(create_gauge_chart, "dataviz")
 tool_registry.register(create_stacked_bar_chart, "dataviz")
 tool_registry.register(create_kpi_card, "dataviz")
 tool_registry.register(create_data_table, "dataviz")
+
+# Advanced visualization tools
+tool_registry.register(create_colorful_bar_chart, "dataviz")
+tool_registry.register(create_multi_line_chart, "dataviz")
+tool_registry.register(create_country_map, "dataviz")
+tool_registry.register(create_3d_scatter, "dataviz")
+tool_registry.register(create_3d_bar_chart, "dataviz")
+tool_registry.register(create_bubble_chart, "dataviz")
+tool_registry.register(create_waterfall_chart, "dataviz")
+tool_registry.register(create_funnel_chart, "dataviz")
 
 # Dashboard generation tools
 tool_registry.register(generate_dashboard, "dataviz")

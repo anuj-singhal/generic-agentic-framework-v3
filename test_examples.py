@@ -2448,6 +2448,68 @@ The system should decide the best visualizations based on the data and create a 
 ]
 
 
+# Advanced Visualization Examples (3D, Maps, Colorful Charts)
+DATAVIZ_ADVANCED_EXAMPLES = [
+    {
+        "name": "Colorful Bar and Line Charts Dashboard",
+        "agent": "dataviz_agent",
+        "query": """Create a dashboard for TRANSACTIONS with colorful gradient charts:
+
+1. Analyze the TRANSACTIONS table
+2. Create visualizations using:
+   - Colorful bar chart showing transaction amounts by type
+   - Multi-line chart showing transaction trends over time
+3. Include standard KPIs and data table at the end
+4. Use dark theme for professional look""",
+        "expected_tools": ["analyze_data_for_viz", "create_colorful_bar_chart", "create_multi_line_chart", "generate_dashboard"],
+        "description": "Dashboard with colorful gradient bar and multi-line charts"
+    },
+    {
+        "name": "3D Visualization Dashboard",
+        "agent": "dataviz_agent",
+        "query": """Create a 3D visualization dashboard for HOLDINGS:
+
+1. Analyze the HOLDINGS table
+2. Create 3D charts:
+   - 3D scatter plot of QUANTITY vs AVG_COST vs a third dimension
+   - Bubble chart showing portfolio distribution
+3. Add standard KPIs
+4. Data table at the end
+5. Dark theme""",
+        "expected_tools": ["analyze_data_for_viz", "create_3d_scatter", "create_bubble_chart", "generate_dashboard"],
+        "description": "Dashboard featuring 3D scatter and bubble charts"
+    },
+    {
+        "name": "Country Map Dashboard",
+        "agent": "dataviz_agent",
+        "query": """Create a dashboard for CLIENTS with country-based visualization:
+
+1. Analyze the CLIENTS table
+2. Create a choropleth world map showing client distribution by COUNTRY
+3. Add colorful bar chart showing clients per country
+4. Include KPIs: Total clients, unique countries
+5. Data table at the end
+6. Dark theme""",
+        "expected_tools": ["analyze_data_for_viz", "create_country_map", "create_colorful_bar_chart", "generate_dashboard"],
+        "description": "Dashboard with world map showing client distribution"
+    },
+    {
+        "name": "Waterfall and Funnel Dashboard",
+        "agent": "dataviz_agent",
+        "query": """Create a dashboard showing transaction flow:
+
+1. Analyze TRANSACTIONS table
+2. Create:
+   - Waterfall chart showing cumulative transaction impact
+   - Funnel chart showing transaction stages (BUY vs SELL breakdown)
+3. Add standard KPIs
+4. Data table at the end""",
+        "expected_tools": ["analyze_data_for_viz", "create_waterfall_chart", "create_funnel_chart", "generate_dashboard"],
+        "description": "Dashboard with waterfall and funnel visualizations"
+    },
+]
+
+
 # Multi-Table Dashboard Examples
 DATAVIZ_MULTI_TABLE_EXAMPLES = [
     {
@@ -2594,6 +2656,7 @@ def print_examples():
         ("📈 DATAVIZ SIMPLE", DATAVIZ_SIMPLE_EXAMPLES),
         ("📈 DATAVIZ MEDIUM", DATAVIZ_MEDIUM_EXAMPLES),
         ("📈 DATAVIZ COMPLEX", DATAVIZ_COMPLEX_EXAMPLES),
+        ("📈 DATAVIZ ADVANCED", DATAVIZ_ADVANCED_EXAMPLES),
         ("📈 DATAVIZ MULTI-TABLE", DATAVIZ_MULTI_TABLE_EXAMPLES),
     ]
 
@@ -2649,6 +2712,7 @@ def get_example_by_name(name: str) -> dict:
         DATAVIZ_SIMPLE_EXAMPLES +
         DATAVIZ_MEDIUM_EXAMPLES +
         DATAVIZ_COMPLEX_EXAMPLES +
+        DATAVIZ_ADVANCED_EXAMPLES +
         DATAVIZ_MULTI_TABLE_EXAMPLES
     )
 
@@ -2697,6 +2761,7 @@ def get_examples_by_agent(agent_name: str) -> list:
         DATAVIZ_SIMPLE_EXAMPLES +
         DATAVIZ_MEDIUM_EXAMPLES +
         DATAVIZ_COMPLEX_EXAMPLES +
+        DATAVIZ_ADVANCED_EXAMPLES +
         DATAVIZ_MULTI_TABLE_EXAMPLES
     )
 
@@ -2742,6 +2807,7 @@ def get_examples_by_tool(tool_name: str) -> list:
         DATAVIZ_SIMPLE_EXAMPLES +
         DATAVIZ_MEDIUM_EXAMPLES +
         DATAVIZ_COMPLEX_EXAMPLES +
+        DATAVIZ_ADVANCED_EXAMPLES +
         DATAVIZ_MULTI_TABLE_EXAMPLES
     )
 
