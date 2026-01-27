@@ -753,14 +753,26 @@ PHASE 5: PLANNING & CUSTOM ANALYSIS
 17. generate_eda_plan(session_id) - Get domain-specific recommendations
 18. execute_custom_analysis(session_id, code) - Run custom pandas code
 
-PHASE 6: SUMMARY
+PHASE 6: VISUALIZATION (Create visual reports with charts)
+----------------------------------------------------------
+19. plot_histogram(session_id, column, bins, show_kde) - Distribution histograms with KDE
+20. plot_boxplot(session_id, column, group_by) - Box plots for outlier detection
+21. plot_bar_chart(session_id, column, top_n, horizontal) - Categorical bar charts
+22. plot_scatter(session_id, x_col, y_col, color_by, size_by) - Scatter plots for bivariate analysis
+23. plot_correlation_heatmap(session_id, method, annotate) - Correlation matrix heatmap
+24. plot_pairplot(session_id, columns, hue, max_columns) - Multi-variable scatter matrix
+25. plot_class_distribution(session_id, column, show_pct) - Class imbalance visualization
+26. plot_violin(session_id, column, group_by) - Violin plots (distribution + density)
+27. generate_eda_visual_report(session_id) - Complete visual EDA report with all charts
+
+PHASE 7: SUMMARY
 ----------------
-19. get_eda_summary(session_id) - Comprehensive final report
-20. get_session_info(session_id) - Session status and progress
-21. list_eda_sessions() - View all active sessions
+28. get_eda_summary(session_id) - Comprehensive final report
+29. get_session_info(session_id) - Session status and progress
+30. list_eda_sessions() - View all active sessions
 
 ═══════════════════════════════════════════════════════════════════════════
-AVAILABLE TOOLS (21 total)
+AVAILABLE TOOLS (31 total)
 ═══════════════════════════════════════════════════════════════════════════
 
 DISCOVERY TOOLS:
@@ -791,13 +803,26 @@ PLANNING & CUSTOM:
 17. generate_eda_plan(session_id) - Domain-specific EDA recommendations
 18. execute_custom_analysis(session_id, code) - Run pandas code (df variable)
 
+VISUALIZATION TOOLS (Seaborn/Matplotlib):
+19. plot_histogram(session_id, column, bins, show_kde) - Histograms with KDE overlay
+20. plot_boxplot(session_id, column, group_by) - Box plots showing quartiles & outliers
+21. plot_bar_chart(session_id, column, top_n, horizontal) - Categorical distributions
+22. plot_scatter(session_id, x_col, y_col, color_by, size_by) - Bivariate scatter plots
+23. plot_correlation_heatmap(session_id, method, annotate) - Correlation matrix heatmap
+24. plot_pairplot(session_id, columns, hue, max_columns) - Pairwise relationships
+25. plot_class_distribution(session_id, column, show_pct) - Sparse/imbalanced class detection
+26. plot_violin(session_id, column, group_by) - Violin plots (box + KDE)
+27. generate_eda_visual_report(session_id) - ALL visualizations as PNG files
+28. generate_eda_html_report(session_id, open_browser) - INTERACTIVE HTML REPORT with embedded charts & tables (RECOMMENDED)
+
 SUMMARY & SESSION:
-19. get_eda_summary(session_id) - Complete EDA report with findings
-20. get_session_info(session_id) - Session details and progress
-21. list_eda_sessions() - List all active EDA sessions
+29. get_eda_summary(session_id) - Complete EDA report with findings
+30. get_session_info(session_id) - Session details and progress
+31. list_eda_sessions() - List all active EDA sessions
+30. list_eda_sessions() - List all active EDA sessions
 
 ═══════════════════════════════════════════════════════════════════════════
-EXAMPLE: COMPLETE EDA WORKFLOW
+EXAMPLE: COMPLETE EDA WORKFLOW WITH VISUALIZATIONS
 ═══════════════════════════════════════════════════════════════════════════
 
 User: "Do a complete EDA on the TRANSACTIONS table"
@@ -829,13 +854,58 @@ Step 4: Quality & Relationships
 > check_data_quality("abc123")
 > analyze_column_relationships("abc123")
 
-Step 5: Planning
-----------------
-> generate_eda_plan("abc123")  # Get domain-specific suggestions
+Step 5: Visualizations (Generate charts for insights)
+-----------------------------------------------------
+> plot_histogram("abc123")  # Distribution of numeric columns
+> plot_boxplot("abc123")  # Outlier visualization
+> plot_correlation_heatmap("abc123")  # Correlation matrix heatmap
+> plot_bar_chart("abc123", "TRANSACTION_TYPE")  # Categorical distribution
+> plot_class_distribution("abc123", "TRANSACTION_TYPE")  # Check class imbalance
+> plot_scatter("abc123", "PRICE", "QUANTITY")  # Bivariate analysis
 
-Step 6: Summary
+Step 6: Generate Interactive HTML Report (RECOMMENDED)
+------------------------------------------------------
+> generate_eda_html_report("abc123")  # Opens in browser with all charts & tables!
+
+Step 7: Summary
 ---------------
 > get_eda_summary("abc123")  # Complete report with all findings
+
+═══════════════════════════════════════════════════════════════════════════
+VISUALIZATION OUTPUT
+═══════════════════════════════════════════════════════════════════════════
+
+TWO OUTPUT OPTIONS:
+
+1. INTERACTIVE HTML REPORT (RECOMMENDED):
+   > generate_eda_html_report(session_id)
+   - Creates a beautiful HTML dashboard with ALL charts embedded
+   - Opens automatically in browser
+   - Includes: Summary tables, distributions, correlations, outliers, categorical charts
+   - Saved to: sample_files/eda_visualizations/reports/
+   - Dark theme with interactive navigation
+
+2. INDIVIDUAL PNG FILES:
+   - Each visualization tool saves to: sample_files/eda_visualizations/
+   - Useful for including in presentations or documents
+
+Chart types available:
+- Histograms: Distribution with KDE curve, mean/median lines
+- Box Plots: Quartiles, IQR, outliers highlighted
+- Bar Charts: Categorical frequency with value labels
+- Scatter Plots: Bivariate relationships with trend line
+- Correlation Heatmap: Color-coded correlation matrix
+- Pair Plots: Multi-variable scatter matrix
+- Violin Plots: Box plot + KDE combined
+- Class Distribution: Imbalance detection with pie chart
+
+generate_eda_visual_report() creates PNG files including:
+- Summary statistics table
+- Distribution grid for all numeric columns
+- Box plot grid for outlier detection
+- Correlation heatmap
+- Categorical distributions
+- Missing values pattern heatmap
 
 ═══════════════════════════════════════════════════════════════════════════
 KEY ANALYSES TO ALWAYS PERFORM
@@ -855,9 +925,19 @@ DO THESE IF APPLICABLE:
 - Datetime analysis (if datetime columns exist)
 - Categorical deep dive (if categorical columns exist)
 
+VISUALIZATIONS (Include relevant charts):
+- Histograms for numeric distribution analysis
+- Box plots for outlier visualization
+- Correlation heatmap for relationship analysis
+- Bar charts for categorical distributions
+- Scatter plots for bivariate relationships
+- Class distribution plots for imbalance detection
+- generate_eda_visual_report() for comprehensive visual summary
+
 ALWAYS FINISH WITH:
+- Visual EDA report (generate_eda_visual_report)
 - Data quality assessment
-- EDA summary report
+- EDA summary report with table format
 
 ═══════════════════════════════════════════════════════════════════════════
 DATA QUALITY SCORING
@@ -887,11 +967,15 @@ IMPORTANT NOTES
 5. For large tables, use the limit parameter (max 100,000 rows)
 6. execute_custom_analysis() allows flexible pandas operations
 7. All numeric operations handle NaN values automatically
+8. VISUALIZATIONS are saved to: sample_files/eda_visualizations/
+9. Use generate_eda_visual_report() for comprehensive charts + summary table
+10. Visualization tools use Seaborn/Matplotlib for professional charts
 
 ═══════════════════════════════════════════════════════════════════════════
 INSIGHTS TO LOOK FOR
 ═══════════════════════════════════════════════════════════════════════════
 
+From Statistical Analysis:
 - High missing values (>20%) - Data quality concern
 - Unexpected duplicates - Data integrity issue
 - Outliers in numeric columns - May need treatment
@@ -900,6 +984,15 @@ INSIGHTS TO LOOK FOR
 - Class imbalance in categorical - May need resampling
 - Temporal gaps in datetime - Missing time periods
 - Functional dependencies - Redundant columns
+
+From Visualizations:
+- Histograms: Skewed distributions, bimodal patterns, unexpected peaks
+- Box Plots: Outlier positions, IQR spread, median asymmetry
+- Correlation Heatmap: Strong color clusters, multicollinearity patterns
+- Scatter Plots: Linear/nonlinear trends, clusters, heteroscedasticity
+- Bar Charts: Dominant categories, long-tail distributions
+- Class Distribution: Sparse classes (<5%), severe imbalance ratios
+- Violin Plots: Multi-modal distributions, density variations
 
 ═══════════════════════════════════════════════════════════════════════════""",
     tool_categories=["eda"],

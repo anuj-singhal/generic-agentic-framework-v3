@@ -40,6 +40,20 @@ try:
 except ImportError:
     SCIPY_AVAILABLE = False
 
+# Import visualization libraries
+try:
+    import matplotlib
+    matplotlib.use('Agg')  # Non-interactive backend for saving figures
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    VISUALIZATION_AVAILABLE = True
+except ImportError:
+    VISUALIZATION_AVAILABLE = False
+
+# Output directory for visualization files
+VIZ_OUTPUT_DIR = "sample_files/eda_visualizations"
+os.makedirs(VIZ_OUTPUT_DIR, exist_ok=True)
+
 # In-memory session store for EDA sessions
 _eda_sessions: Dict[str, Dict[str, Any]] = {}
 
@@ -2187,6 +2201,1756 @@ def list_eda_sessions() -> str:
 
 
 # =============================================================================
+# VISUALIZATION TOOLS
+# =============================================================================
+
+def _get_viz_path(session_id: str, chart_type: str, suffix: str = "") -> str:
+    """Generate a unique path for saving visualizations."""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"{session_id}_{chart_type}_{suffix}_{timestamp}.png" if suffix else f"{session_id}_{chart_type}_{timestamp}.png"
+    return os.path.join(VIZ_OUTPUT_DIR, filename)
+
+
+def _setup_plot_style(figsize=(12, 8), style="darkgrid"):
+    """Set up matplotlib/seaborn plot style."""
+    if not VISUALIZATION_AVAILABLE:
+        return None
+
+    plt.style.use('seaborn-v0_8-darkgrid' if 'seaborn-v0_8-darkgrid' in plt.style.available else 'default')
+    sns.set_palette("husl")
+    fig, ax = plt.subplots(figsize=figsize)
+    return fig, ax
+
+
+@tool
+def plot_histogram(session_id: str, column_name: Optional[str] = None, bins: int = 30, show_kde: bool = True) -> str:
+    """
+    Create histogram plots for numeric columns to analyze distributions.
+    Shows frequency distribution with optional KDE (Kernel Density Estimation) overlay.
+
+    Args:
+        session_id: EDA session ID
+        column_name: Specific column to plot (optional, plots all numeric if not specified)
+        bins: Number of bins for histogram (default 30)
+        show_kde: Whether to show KDE curve overlay (default True)
+
+    Returns:
+        Path to saved visualization file(s) and distribution insights
+    """
+    if not VISUALIZATION_AVAILABLE:
+        return "Error: Visualization libraries (matplotlib, seaborn) not installed. Run: pip install matplotlib seaborn"
+
+    try:
+        if session_id not in _eda_sessions:
+            return f"Error: Session '{session_id}' not found."
+
+        session = _eda_sessions[session_id]
+        df = session.get("dataframe")
+
+        if df is None:
+            return "Error: No DataFrame in session."
+
+        # Get columns to plot
+        if column_name:
+            column_name = column_name.upper()
+            col_map = {c.upper(): c for c in df.columns}
+            if column_name not in col_map:
+                return f"Error: Column '{column_name}' not found."
+            columns = [col_map[column_name]]
+        else:
+            columns = df.select_dtypes(include=[np.number]).columns.tolist()
+
+        if not columns:
+            return "Error: No numeric columns found for histogram."
+
+        saved_files = []
+        insights = []
+
+        # Create individual histograms
+        for col in columns[:6]:  # Limit to 6 columns
+            fig, ax = plt.subplots(figsize=(10, 6))
+
+            col_data = df[col].dropna()
+
+            # Plot histogram with KDE
+            if show_kde and len(col_data) > 1:
+                sns.histplot(col_data, bins=bins, kde=True, ax=ax, color='#3498db', alpha=0.7)
+            else:
+                sns.histplot(col_data, bins=bins, ax=ax, color='#3498db', alpha=0.7)
+
+            # Add statistics annotations
+            mean_val = col_data.mean()
+            median_val = col_data.median()
+            ax.axvline(mean_val, color='red', linestyle='--', linewidth=2, label=f'Mean: {mean_val:.2f}')
+            ax.axvline(median_val, color='green', linestyle='-.', linewidth=2, label=f'Median: {median_val:.2f}')
+
+            ax.set_title(f'Distribution of {col}', fontsize=14, fontweight='bold')
+            ax.set_xlabel(col, fontsize=12)
+            ax.set_ylabel('Frequency', fontsize=12)
+            ax.legend()
+
+            # Save figure
+            filepath = _get_viz_path(session_id, "histogram", col)
+            plt.tight_layout()
+            plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+            plt.close(fig)
+
+            saved_files.append(filepath)
+
+            # Add insight
+            skewness = stats.skew(col_data) if SCIPY_AVAILABLE else None
+            insights.append({
+                "column": col,
+                "mean": round(mean_val, 4),
+                "median": round(median_val, 4),
+                "skewness": round(skewness, 4) if skewness else None,
+                "distribution_shape": "right-skewed" if skewness and skewness > 0.5 else "left-skewed" if skewness and skewness < -0.5 else "approximately normal"
+            })
+
+        result = {
+            "session_id": session_id,
+            "visualization_type": "histogram",
+            "columns_plotted": len(saved_files),
+            "saved_files": saved_files,
+            "insights": insights,
+            "note": "Histograms show the frequency distribution. Red dashed line = Mean, Green dash-dot = Median."
+        }
+
+        _store_result(session_id, "viz_histograms", result)
+
+        return json.dumps(result, indent=2, default=str)
+
+    except Exception as e:
+        return f"Error creating histogram: {str(e)}"
+
+
+@tool
+def plot_boxplot(session_id: str, column_name: Optional[str] = None, group_by: Optional[str] = None) -> str:
+    """
+    Create box plots to visualize distributions and identify outliers.
+    Shows median, quartiles, and outliers for numeric columns.
+
+    Args:
+        session_id: EDA session ID
+        column_name: Specific numeric column to plot (optional)
+        group_by: Categorical column to group by (optional, creates grouped boxplot)
+
+    Returns:
+        Path to saved visualization and outlier insights
+    """
+    if not VISUALIZATION_AVAILABLE:
+        return "Error: Visualization libraries not installed."
+
+    try:
+        if session_id not in _eda_sessions:
+            return f"Error: Session '{session_id}' not found."
+
+        session = _eda_sessions[session_id]
+        df = session.get("dataframe")
+
+        if df is None:
+            return "Error: No DataFrame in session."
+
+        saved_files = []
+        insights = []
+
+        # Get numeric columns
+        if column_name:
+            col_map = {c.upper(): c for c in df.columns}
+            if column_name.upper() not in col_map:
+                return f"Error: Column '{column_name}' not found."
+            numeric_cols = [col_map[column_name.upper()]]
+        else:
+            numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+
+        if not numeric_cols:
+            return "Error: No numeric columns found for boxplot."
+
+        # Grouped boxplot
+        if group_by:
+            col_map = {c.upper(): c for c in df.columns}
+            if group_by.upper() not in col_map:
+                return f"Error: Group column '{group_by}' not found."
+            group_col = col_map[group_by.upper()]
+
+            for col in numeric_cols[:4]:  # Limit to 4 columns
+                fig, ax = plt.subplots(figsize=(12, 6))
+
+                sns.boxplot(data=df, x=group_col, y=col, ax=ax, palette="husl")
+                ax.set_title(f'Box Plot: {col} by {group_col}', fontsize=14, fontweight='bold')
+                ax.set_xlabel(group_col, fontsize=12)
+                ax.set_ylabel(col, fontsize=12)
+                plt.xticks(rotation=45, ha='right')
+
+                filepath = _get_viz_path(session_id, "boxplot_grouped", f"{col}_by_{group_col}")
+                plt.tight_layout()
+                plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+                plt.close(fig)
+
+                saved_files.append(filepath)
+        else:
+            # Single boxplot for all numeric columns
+            if len(numeric_cols) > 1:
+                # Normalize data for comparison
+                fig, ax = plt.subplots(figsize=(14, 8))
+
+                # Create boxplot for all numeric columns
+                df_numeric = df[numeric_cols].dropna()
+
+                # Standardize for visualization if ranges differ significantly
+                df_plot = (df_numeric - df_numeric.mean()) / df_numeric.std()
+
+                sns.boxplot(data=df_plot, ax=ax, palette="husl")
+                ax.set_title('Box Plots - All Numeric Columns (Standardized)', fontsize=14, fontweight='bold')
+                ax.set_ylabel('Standardized Value', fontsize=12)
+                plt.xticks(rotation=45, ha='right')
+
+                filepath = _get_viz_path(session_id, "boxplot", "all_numeric")
+                plt.tight_layout()
+                plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+                plt.close(fig)
+
+                saved_files.append(filepath)
+
+            # Individual boxplots
+            for col in numeric_cols[:4]:
+                fig, ax = plt.subplots(figsize=(8, 6))
+
+                col_data = df[col].dropna()
+
+                # Box plot with individual points
+                sns.boxplot(y=col_data, ax=ax, color='#3498db', width=0.3)
+                sns.stripplot(y=col_data, ax=ax, color='#e74c3c', alpha=0.3, size=3)
+
+                # Calculate outlier info
+                Q1 = col_data.quantile(0.25)
+                Q3 = col_data.quantile(0.75)
+                IQR = Q3 - Q1
+                outliers = col_data[(col_data < Q1 - 1.5*IQR) | (col_data > Q3 + 1.5*IQR)]
+
+                ax.set_title(f'Box Plot: {col}', fontsize=14, fontweight='bold')
+                ax.set_ylabel(col, fontsize=12)
+
+                filepath = _get_viz_path(session_id, "boxplot", col)
+                plt.tight_layout()
+                plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+                plt.close(fig)
+
+                saved_files.append(filepath)
+
+                insights.append({
+                    "column": col,
+                    "Q1": round(Q1, 4),
+                    "median": round(col_data.median(), 4),
+                    "Q3": round(Q3, 4),
+                    "IQR": round(IQR, 4),
+                    "outlier_count": len(outliers),
+                    "outlier_percentage": round(len(outliers) / len(col_data) * 100, 2)
+                })
+
+        result = {
+            "session_id": session_id,
+            "visualization_type": "boxplot",
+            "columns_plotted": len(numeric_cols),
+            "grouped_by": group_by,
+            "saved_files": saved_files,
+            "outlier_insights": insights,
+            "note": "Box plots show median (line), IQR (box), and outliers (points beyond whiskers)."
+        }
+
+        _store_result(session_id, "viz_boxplots", result)
+
+        return json.dumps(result, indent=2, default=str)
+
+    except Exception as e:
+        return f"Error creating boxplot: {str(e)}"
+
+
+@tool
+def plot_bar_chart(session_id: str, column_name: str, top_n: int = 15, horizontal: bool = False) -> str:
+    """
+    Create bar charts to visualize categorical variable distributions.
+    Shows value counts for categorical columns.
+
+    Args:
+        session_id: EDA session ID
+        column_name: Categorical column to plot
+        top_n: Number of top categories to show (default 15)
+        horizontal: Whether to create horizontal bar chart (default False)
+
+    Returns:
+        Path to saved visualization and category insights
+    """
+    if not VISUALIZATION_AVAILABLE:
+        return "Error: Visualization libraries not installed."
+
+    try:
+        if session_id not in _eda_sessions:
+            return f"Error: Session '{session_id}' not found."
+
+        session = _eda_sessions[session_id]
+        df = session.get("dataframe")
+
+        if df is None:
+            return "Error: No DataFrame in session."
+
+        # Find column
+        col_map = {c.upper(): c for c in df.columns}
+        if column_name.upper() not in col_map:
+            return f"Error: Column '{column_name}' not found."
+
+        col = col_map[column_name.upper()]
+
+        # Get value counts
+        value_counts = df[col].value_counts().head(top_n)
+
+        # Create bar chart
+        fig, ax = plt.subplots(figsize=(12, 8))
+
+        colors = sns.color_palette("husl", len(value_counts))
+
+        if horizontal:
+            bars = ax.barh(range(len(value_counts)), value_counts.values, color=colors)
+            ax.set_yticks(range(len(value_counts)))
+            ax.set_yticklabels(value_counts.index)
+            ax.set_xlabel('Count', fontsize=12)
+            ax.set_ylabel(col, fontsize=12)
+            ax.invert_yaxis()  # Highest at top
+
+            # Add value labels
+            for i, (bar, val) in enumerate(zip(bars, value_counts.values)):
+                ax.text(val + max(value_counts.values) * 0.01, bar.get_y() + bar.get_height()/2,
+                       f'{val:,}', va='center', fontsize=10)
+        else:
+            bars = ax.bar(range(len(value_counts)), value_counts.values, color=colors)
+            ax.set_xticks(range(len(value_counts)))
+            ax.set_xticklabels(value_counts.index, rotation=45, ha='right')
+            ax.set_xlabel(col, fontsize=12)
+            ax.set_ylabel('Count', fontsize=12)
+
+            # Add value labels
+            for bar, val in zip(bars, value_counts.values):
+                ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max(value_counts.values) * 0.01,
+                       f'{val:,}', ha='center', fontsize=10)
+
+        ax.set_title(f'Distribution of {col} (Top {top_n})', fontsize=14, fontweight='bold')
+
+        # Save figure
+        filepath = _get_viz_path(session_id, "bar_chart", col)
+        plt.tight_layout()
+        plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+        plt.close(fig)
+
+        # Calculate insights
+        total = value_counts.sum()
+        top_category = value_counts.index[0]
+        top_pct = value_counts.iloc[0] / total * 100
+
+        result = {
+            "session_id": session_id,
+            "visualization_type": "bar_chart",
+            "column": col,
+            "saved_file": filepath,
+            "insights": {
+                "total_records": int(total),
+                "unique_categories": int(df[col].nunique()),
+                "top_category": str(top_category),
+                "top_category_count": int(value_counts.iloc[0]),
+                "top_category_percentage": round(top_pct, 2),
+                "categories_shown": len(value_counts),
+                "categories_hidden": max(0, df[col].nunique() - top_n)
+            }
+        }
+
+        _store_result(session_id, f"viz_bar_{col}", result)
+
+        return json.dumps(result, indent=2, default=str)
+
+    except Exception as e:
+        return f"Error creating bar chart: {str(e)}"
+
+
+@tool
+def plot_scatter(session_id: str, x_column: str, y_column: str, color_by: Optional[str] = None, size_by: Optional[str] = None) -> str:
+    """
+    Create scatter plots for bivariate analysis between two numeric columns.
+    Optionally color or size points by another variable.
+
+    Args:
+        session_id: EDA session ID
+        x_column: Column for x-axis
+        y_column: Column for y-axis
+        color_by: Optional column to color points by (categorical recommended)
+        size_by: Optional numeric column to size points by
+
+    Returns:
+        Path to saved visualization and correlation insights
+    """
+    if not VISUALIZATION_AVAILABLE:
+        return "Error: Visualization libraries not installed."
+
+    try:
+        if session_id not in _eda_sessions:
+            return f"Error: Session '{session_id}' not found."
+
+        session = _eda_sessions[session_id]
+        df = session.get("dataframe")
+
+        if df is None:
+            return "Error: No DataFrame in session."
+
+        col_map = {c.upper(): c for c in df.columns}
+
+        # Validate columns
+        if x_column.upper() not in col_map or y_column.upper() not in col_map:
+            return f"Error: Column not found. Available: {list(df.columns)}"
+
+        x_col = col_map[x_column.upper()]
+        y_col = col_map[y_column.upper()]
+
+        # Create scatter plot
+        fig, ax = plt.subplots(figsize=(12, 8))
+
+        scatter_kwargs = {"alpha": 0.6, "edgecolors": "white", "linewidth": 0.5}
+
+        if color_by and color_by.upper() in col_map:
+            color_col = col_map[color_by.upper()]
+            unique_colors = df[color_col].nunique()
+
+            if unique_colors <= 10:
+                # Categorical coloring
+                for i, cat in enumerate(df[color_col].unique()):
+                    mask = df[color_col] == cat
+                    size = df[col_map[size_by.upper()]][mask] if size_by and size_by.upper() in col_map else 50
+                    ax.scatter(df[x_col][mask], df[y_col][mask], s=size, label=str(cat), **scatter_kwargs)
+                ax.legend(title=color_col, bbox_to_anchor=(1.05, 1), loc='upper left')
+            else:
+                # Continuous coloring
+                size = df[col_map[size_by.upper()]] if size_by and size_by.upper() in col_map else 50
+                scatter = ax.scatter(df[x_col], df[y_col], c=df[color_col], s=size, cmap='viridis', **scatter_kwargs)
+                plt.colorbar(scatter, label=color_col)
+        else:
+            size = df[col_map[size_by.upper()]] if size_by and size_by.upper() in col_map else 50
+            ax.scatter(df[x_col], df[y_col], s=size, c='#3498db', **scatter_kwargs)
+
+        # Add regression line
+        try:
+            x_clean = df[x_col].dropna()
+            y_clean = df[y_col].dropna()
+
+            # Align the data
+            mask = df[x_col].notna() & df[y_col].notna()
+            x_vals = df.loc[mask, x_col]
+            y_vals = df.loc[mask, y_col]
+
+            if len(x_vals) > 2:
+                z = np.polyfit(x_vals, y_vals, 1)
+                p = np.poly1d(z)
+                x_line = np.linspace(x_vals.min(), x_vals.max(), 100)
+                ax.plot(x_line, p(x_line), "r--", alpha=0.8, label=f'Trend Line')
+        except:
+            pass
+
+        ax.set_xlabel(x_col, fontsize=12)
+        ax.set_ylabel(y_col, fontsize=12)
+        ax.set_title(f'Scatter Plot: {x_col} vs {y_col}', fontsize=14, fontweight='bold')
+
+        # Calculate correlation
+        mask = df[x_col].notna() & df[y_col].notna()
+        correlation = df.loc[mask, [x_col, y_col]].corr().iloc[0, 1]
+        ax.text(0.05, 0.95, f'Correlation: {correlation:.4f}', transform=ax.transAxes,
+               fontsize=11, verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+
+        # Save figure
+        filepath = _get_viz_path(session_id, "scatter", f"{x_col}_vs_{y_col}")
+        plt.tight_layout()
+        plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+        plt.close(fig)
+
+        # Determine relationship strength
+        abs_corr = abs(correlation)
+        if abs_corr >= 0.7:
+            relationship = "strong"
+        elif abs_corr >= 0.4:
+            relationship = "moderate"
+        elif abs_corr >= 0.2:
+            relationship = "weak"
+        else:
+            relationship = "very weak/no"
+
+        result = {
+            "session_id": session_id,
+            "visualization_type": "scatter_plot",
+            "x_column": x_col,
+            "y_column": y_col,
+            "color_by": color_by,
+            "size_by": size_by,
+            "saved_file": filepath,
+            "insights": {
+                "correlation": round(correlation, 4),
+                "correlation_type": "positive" if correlation > 0 else "negative",
+                "relationship_strength": relationship,
+                "data_points": int(mask.sum())
+            }
+        }
+
+        _store_result(session_id, f"viz_scatter_{x_col}_{y_col}", result)
+
+        return json.dumps(result, indent=2, default=str)
+
+    except Exception as e:
+        return f"Error creating scatter plot: {str(e)}"
+
+
+@tool
+def plot_correlation_heatmap(session_id: str, method: str = "pearson", annotate: bool = True) -> str:
+    """
+    Create a correlation heatmap for all numeric columns.
+    Visualizes the correlation matrix with color-coded cells.
+
+    Args:
+        session_id: EDA session ID
+        method: Correlation method - 'pearson', 'spearman', or 'kendall'
+        annotate: Whether to show correlation values on cells (default True)
+
+    Returns:
+        Path to saved heatmap and high correlation pairs
+    """
+    if not VISUALIZATION_AVAILABLE:
+        return "Error: Visualization libraries not installed."
+
+    try:
+        if session_id not in _eda_sessions:
+            return f"Error: Session '{session_id}' not found."
+
+        session = _eda_sessions[session_id]
+        df = session.get("dataframe")
+
+        if df is None:
+            return "Error: No DataFrame in session."
+
+        # Get numeric columns
+        numeric_df = df.select_dtypes(include=[np.number])
+
+        if len(numeric_df.columns) < 2:
+            return "Error: Need at least 2 numeric columns for correlation heatmap."
+
+        # Calculate correlation matrix
+        corr_matrix = numeric_df.corr(method=method)
+
+        # Create heatmap
+        n_cols = len(corr_matrix.columns)
+        fig_size = max(10, n_cols * 0.8)
+
+        fig, ax = plt.subplots(figsize=(fig_size, fig_size * 0.8))
+
+        # Create mask for upper triangle (optional - show full matrix)
+        mask = np.triu(np.ones_like(corr_matrix, dtype=bool), k=1)
+
+        # Generate heatmap
+        cmap = sns.diverging_palette(250, 15, s=75, l=40, n=9, center="light", as_cmap=True)
+
+        sns.heatmap(
+            corr_matrix,
+            mask=mask,
+            annot=annotate and n_cols <= 15,  # Only annotate if not too many columns
+            cmap=cmap,
+            center=0,
+            vmin=-1, vmax=1,
+            square=True,
+            linewidths=0.5,
+            cbar_kws={"shrink": 0.8, "label": "Correlation"},
+            fmt='.2f',
+            ax=ax
+        )
+
+        ax.set_title(f'Correlation Heatmap ({method.capitalize()})', fontsize=14, fontweight='bold')
+        plt.xticks(rotation=45, ha='right')
+        plt.yticks(rotation=0)
+
+        # Save figure
+        filepath = _get_viz_path(session_id, "correlation_heatmap", method)
+        plt.tight_layout()
+        plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+        plt.close(fig)
+
+        # Find high correlations
+        high_correlations = []
+        for i in range(len(corr_matrix.columns)):
+            for j in range(i+1, len(corr_matrix.columns)):
+                corr = corr_matrix.iloc[i, j]
+                if abs(corr) >= 0.5:
+                    high_correlations.append({
+                        "column_1": corr_matrix.columns[i],
+                        "column_2": corr_matrix.columns[j],
+                        "correlation": round(corr, 4),
+                        "strength": "strong" if abs(corr) >= 0.7 else "moderate"
+                    })
+
+        # Sort by absolute correlation
+        high_correlations.sort(key=lambda x: abs(x["correlation"]), reverse=True)
+
+        result = {
+            "session_id": session_id,
+            "visualization_type": "correlation_heatmap",
+            "method": method,
+            "saved_file": filepath,
+            "columns_analyzed": len(numeric_df.columns),
+            "high_correlations": high_correlations[:10],  # Top 10
+            "total_high_correlations": len(high_correlations),
+            "note": "Red = positive correlation, Blue = negative correlation. Values closer to 1 or -1 indicate stronger relationships."
+        }
+
+        _store_result(session_id, "viz_correlation_heatmap", result)
+
+        return json.dumps(result, indent=2, default=str)
+
+    except Exception as e:
+        return f"Error creating correlation heatmap: {str(e)}"
+
+
+@tool
+def plot_pairplot(session_id: str, columns: Optional[str] = None, hue: Optional[str] = None, max_columns: int = 5) -> str:
+    """
+    Create a pairplot (scatter matrix) for multivariate analysis.
+    Shows relationships between all pairs of numeric variables.
+
+    Args:
+        session_id: EDA session ID
+        columns: Comma-separated list of columns (optional, uses top numeric columns)
+        hue: Categorical column to color points by (optional)
+        max_columns: Maximum number of columns to include (default 5)
+
+    Returns:
+        Path to saved pairplot visualization
+    """
+    if not VISUALIZATION_AVAILABLE:
+        return "Error: Visualization libraries not installed."
+
+    try:
+        if session_id not in _eda_sessions:
+            return f"Error: Session '{session_id}' not found."
+
+        session = _eda_sessions[session_id]
+        df = session.get("dataframe")
+
+        if df is None:
+            return "Error: No DataFrame in session."
+
+        col_map = {c.upper(): c for c in df.columns}
+
+        # Get columns to plot
+        if columns:
+            col_list = [c.strip() for c in columns.split(",")]
+            plot_cols = []
+            for c in col_list:
+                if c.upper() in col_map:
+                    plot_cols.append(col_map[c.upper()])
+        else:
+            # Get top numeric columns by variance
+            numeric_df = df.select_dtypes(include=[np.number])
+            variance = numeric_df.var().sort_values(ascending=False)
+            plot_cols = variance.head(max_columns).index.tolist()
+
+        if len(plot_cols) < 2:
+            return "Error: Need at least 2 columns for pairplot."
+
+        plot_cols = plot_cols[:max_columns]  # Limit columns
+
+        # Prepare data for pairplot
+        plot_df = df[plot_cols].dropna()
+
+        # Add hue column if specified
+        hue_col = None
+        if hue and hue.upper() in col_map:
+            hue_col = col_map[hue.upper()]
+            if hue_col not in plot_cols:
+                plot_df = df[plot_cols + [hue_col]].dropna()
+
+        # Create pairplot
+        fig_size = max(8, len(plot_cols) * 2.5)
+
+        if hue_col and plot_df[hue_col].nunique() <= 6:
+            g = sns.pairplot(plot_df, hue=hue_col, palette="husl", diag_kind="kde",
+                           plot_kws={'alpha': 0.6}, height=fig_size/len(plot_cols))
+        else:
+            g = sns.pairplot(plot_df[plot_cols], diag_kind="kde",
+                           plot_kws={'alpha': 0.6, 'color': '#3498db'},
+                           height=fig_size/len(plot_cols))
+
+        g.fig.suptitle('Pairplot - Bivariate Analysis', y=1.02, fontsize=14, fontweight='bold')
+
+        # Save figure
+        filepath = _get_viz_path(session_id, "pairplot", "multivariate")
+        plt.savefig(filepath, dpi=120, bbox_inches='tight', facecolor='white')
+        plt.close()
+
+        result = {
+            "session_id": session_id,
+            "visualization_type": "pairplot",
+            "columns_plotted": plot_cols,
+            "hue_column": hue_col,
+            "data_points": len(plot_df),
+            "saved_file": filepath,
+            "note": "Diagonal shows distributions (KDE), off-diagonal shows scatter plots between pairs. Useful for identifying clusters and relationships."
+        }
+
+        _store_result(session_id, "viz_pairplot", result)
+
+        return json.dumps(result, indent=2, default=str)
+
+    except Exception as e:
+        return f"Error creating pairplot: {str(e)}"
+
+
+@tool
+def plot_class_distribution(session_id: str, column_name: str, show_percentages: bool = True) -> str:
+    """
+    Visualize class distribution for categorical columns to identify imbalanced/sparse classes.
+    Shows both count and percentage distribution with imbalance indicators.
+
+    Args:
+        session_id: EDA session ID
+        column_name: Categorical column to analyze
+        show_percentages: Whether to show percentage labels (default True)
+
+    Returns:
+        Path to saved visualization and class imbalance analysis
+    """
+    if not VISUALIZATION_AVAILABLE:
+        return "Error: Visualization libraries not installed."
+
+    try:
+        if session_id not in _eda_sessions:
+            return f"Error: Session '{session_id}' not found."
+
+        session = _eda_sessions[session_id]
+        df = session.get("dataframe")
+
+        if df is None:
+            return "Error: No DataFrame in session."
+
+        col_map = {c.upper(): c for c in df.columns}
+        if column_name.upper() not in col_map:
+            return f"Error: Column '{column_name}' not found."
+
+        col = col_map[column_name.upper()]
+
+        # Get value counts
+        value_counts = df[col].value_counts()
+        total = len(df)
+
+        # Create figure with two subplots
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 8))
+
+        # Bar chart
+        colors = []
+        rare_threshold = total * 0.05  # 5% threshold for rare classes
+        for count in value_counts.values:
+            if count < rare_threshold:
+                colors.append('#e74c3c')  # Red for rare/sparse classes
+            elif count < total * 0.1:
+                colors.append('#f39c12')  # Orange for moderately rare
+            else:
+                colors.append('#3498db')  # Blue for normal
+
+        bars = ax1.bar(range(len(value_counts)), value_counts.values, color=colors)
+        ax1.set_xticks(range(len(value_counts)))
+        ax1.set_xticklabels(value_counts.index, rotation=45, ha='right')
+        ax1.set_xlabel(col, fontsize=12)
+        ax1.set_ylabel('Count', fontsize=12)
+        ax1.set_title(f'Class Distribution: {col}', fontsize=14, fontweight='bold')
+
+        # Add percentage labels
+        if show_percentages:
+            for bar, count in zip(bars, value_counts.values):
+                pct = count / total * 100
+                ax1.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max(value_counts.values) * 0.01,
+                        f'{pct:.1f}%', ha='center', fontsize=9)
+
+        # Add legend
+        from matplotlib.patches import Patch
+        legend_elements = [
+            Patch(facecolor='#e74c3c', label='Sparse (<5%)'),
+            Patch(facecolor='#f39c12', label='Rare (5-10%)'),
+            Patch(facecolor='#3498db', label='Normal (>10%)')
+        ]
+        ax1.legend(handles=legend_elements, loc='upper right')
+
+        # Pie chart for proportions
+        explode = [0.05 if c < rare_threshold else 0 for c in value_counts.values]
+
+        wedges, texts, autotexts = ax2.pie(
+            value_counts.values,
+            labels=value_counts.index,
+            autopct=lambda pct: f'{pct:.1f}%' if pct >= 2 else '',
+            explode=explode,
+            colors=sns.color_palette("husl", len(value_counts)),
+            startangle=90
+        )
+        ax2.set_title(f'Class Proportions: {col}', fontsize=14, fontweight='bold')
+
+        # Save figure
+        filepath = _get_viz_path(session_id, "class_distribution", col)
+        plt.tight_layout()
+        plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+        plt.close(fig)
+
+        # Calculate imbalance metrics
+        imbalance_ratio = value_counts.max() / value_counts.min() if value_counts.min() > 0 else float('inf')
+        sparse_classes = [str(idx) for idx, count in value_counts.items() if count < rare_threshold]
+        rare_classes = [str(idx) for idx, count in value_counts.items() if rare_threshold <= count < total * 0.1]
+
+        # Gini impurity for imbalance
+        proportions = value_counts / total
+        gini = 1 - sum(proportions ** 2)
+
+        result = {
+            "session_id": session_id,
+            "visualization_type": "class_distribution",
+            "column": col,
+            "saved_file": filepath,
+            "class_counts": {str(k): int(v) for k, v in value_counts.items()},
+            "imbalance_analysis": {
+                "total_classes": len(value_counts),
+                "imbalance_ratio": round(imbalance_ratio, 2),
+                "gini_impurity": round(gini, 4),
+                "is_imbalanced": imbalance_ratio > 3,
+                "majority_class": str(value_counts.index[0]),
+                "majority_percentage": round(value_counts.iloc[0] / total * 100, 2),
+                "minority_class": str(value_counts.index[-1]),
+                "minority_percentage": round(value_counts.iloc[-1] / total * 100, 2),
+                "sparse_classes": sparse_classes,
+                "sparse_count": len(sparse_classes),
+                "rare_classes": rare_classes
+            },
+            "recommendations": []
+        }
+
+        # Add recommendations
+        if imbalance_ratio > 10:
+            result["recommendations"].append("Severe class imbalance detected. Consider SMOTE, undersampling, or class weights.")
+        elif imbalance_ratio > 3:
+            result["recommendations"].append("Moderate class imbalance. Consider stratified sampling or balanced class weights.")
+
+        if sparse_classes:
+            result["recommendations"].append(f"Sparse classes found ({len(sparse_classes)}): Consider grouping or special handling for: {', '.join(sparse_classes[:5])}")
+
+        _store_result(session_id, f"viz_class_dist_{col}", result)
+
+        return json.dumps(result, indent=2, default=str)
+
+    except Exception as e:
+        return f"Error creating class distribution plot: {str(e)}"
+
+
+@tool
+def plot_violin(session_id: str, column_name: str, group_by: Optional[str] = None) -> str:
+    """
+    Create violin plots combining box plots and KDE for distribution visualization.
+    Shows probability density and summary statistics.
+
+    Args:
+        session_id: EDA session ID
+        column_name: Numeric column to plot
+        group_by: Optional categorical column to group by
+
+    Returns:
+        Path to saved violin plot
+    """
+    if not VISUALIZATION_AVAILABLE:
+        return "Error: Visualization libraries not installed."
+
+    try:
+        if session_id not in _eda_sessions:
+            return f"Error: Session '{session_id}' not found."
+
+        session = _eda_sessions[session_id]
+        df = session.get("dataframe")
+
+        if df is None:
+            return "Error: No DataFrame in session."
+
+        col_map = {c.upper(): c for c in df.columns}
+
+        if column_name.upper() not in col_map:
+            return f"Error: Column '{column_name}' not found."
+
+        col = col_map[column_name.upper()]
+
+        # Create violin plot
+        fig, ax = plt.subplots(figsize=(12, 8))
+
+        if group_by and group_by.upper() in col_map:
+            group_col = col_map[group_by.upper()]
+
+            # Limit groups if too many
+            unique_groups = df[group_col].nunique()
+            if unique_groups > 10:
+                top_groups = df[group_col].value_counts().head(10).index
+                plot_df = df[df[group_col].isin(top_groups)]
+            else:
+                plot_df = df
+
+            sns.violinplot(data=plot_df, x=group_col, y=col, ax=ax, palette="husl", inner="box")
+            ax.set_xlabel(group_col, fontsize=12)
+            plt.xticks(rotation=45, ha='right')
+            title = f'Violin Plot: {col} by {group_col}'
+        else:
+            sns.violinplot(y=df[col].dropna(), ax=ax, color='#3498db', inner="box")
+            title = f'Violin Plot: {col}'
+
+        ax.set_ylabel(col, fontsize=12)
+        ax.set_title(title, fontsize=14, fontweight='bold')
+
+        # Save figure
+        suffix = f"{col}_by_{group_by}" if group_by else col
+        filepath = _get_viz_path(session_id, "violin", suffix)
+        plt.tight_layout()
+        plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+        plt.close(fig)
+
+        result = {
+            "session_id": session_id,
+            "visualization_type": "violin_plot",
+            "column": col,
+            "grouped_by": group_by,
+            "saved_file": filepath,
+            "note": "Violin plots show probability density (width) and box plot statistics (inner box). Wider sections indicate higher probability."
+        }
+
+        _store_result(session_id, f"viz_violin_{col}", result)
+
+        return json.dumps(result, indent=2, default=str)
+
+    except Exception as e:
+        return f"Error creating violin plot: {str(e)}"
+
+
+@tool
+def generate_eda_visual_report(session_id: str, include_all: bool = True) -> str:
+    """
+    Generate a comprehensive visual EDA report with multiple charts and a summary table.
+    Creates histograms, boxplots, correlation heatmap, and summary statistics table.
+
+    Args:
+        session_id: EDA session ID
+        include_all: Whether to include all visualizations (default True)
+
+    Returns:
+        Summary of generated visualizations and table report
+    """
+    if not VISUALIZATION_AVAILABLE:
+        return "Error: Visualization libraries not installed."
+
+    try:
+        if session_id not in _eda_sessions:
+            return f"Error: Session '{session_id}' not found."
+
+        session = _eda_sessions[session_id]
+        df = session.get("dataframe")
+
+        if df is None:
+            return "Error: No DataFrame in session."
+
+        generated_files = []
+
+        # 1. Create summary statistics table
+        numeric_df = df.select_dtypes(include=[np.number])
+
+        if len(numeric_df.columns) > 0:
+            # Create styled summary table
+            stats_df = numeric_df.describe().T
+            stats_df['missing'] = df[numeric_df.columns].isna().sum()
+            stats_df['missing_pct'] = (df[numeric_df.columns].isna().sum() / len(df) * 100).round(2)
+
+            if SCIPY_AVAILABLE:
+                stats_df['skewness'] = [stats.skew(df[col].dropna()) for col in numeric_df.columns]
+
+            # Create table figure
+            fig, ax = plt.subplots(figsize=(16, min(len(stats_df) * 0.5 + 2, 12)))
+            ax.axis('off')
+            ax.axis('tight')
+
+            # Format the dataframe for display
+            display_df = stats_df.round(2)
+
+            table = ax.table(
+                cellText=display_df.values,
+                colLabels=display_df.columns,
+                rowLabels=display_df.index,
+                cellLoc='center',
+                loc='center'
+            )
+            table.auto_set_font_size(False)
+            table.set_fontsize(9)
+            table.scale(1.2, 1.5)
+
+            # Color header row
+            for col_idx in range(len(display_df.columns)):
+                table[(0, col_idx)].set_facecolor('#3498db')
+                table[(0, col_idx)].set_text_props(color='white', weight='bold')
+
+            ax.set_title('Summary Statistics Table', fontsize=14, fontweight='bold', pad=20)
+
+            filepath = _get_viz_path(session_id, "summary_table", "statistics")
+            plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+            plt.close(fig)
+            generated_files.append({"type": "summary_table", "file": filepath})
+
+        # 2. Generate histograms for top numeric columns
+        if len(numeric_df.columns) > 0:
+            cols_to_plot = numeric_df.columns[:6]
+            n_cols = len(cols_to_plot)
+            n_rows = (n_cols + 2) // 3
+
+            fig, axes = plt.subplots(n_rows, 3, figsize=(15, 5 * n_rows))
+            axes = axes.flatten() if n_cols > 1 else [axes]
+
+            for i, col in enumerate(cols_to_plot):
+                col_data = df[col].dropna()
+                sns.histplot(col_data, kde=True, ax=axes[i], color='#3498db', alpha=0.7)
+                axes[i].axvline(col_data.mean(), color='red', linestyle='--', label='Mean')
+                axes[i].axvline(col_data.median(), color='green', linestyle='-.', label='Median')
+                axes[i].set_title(f'{col}', fontsize=11, fontweight='bold')
+                axes[i].legend(fontsize=8)
+
+            # Hide unused subplots
+            for j in range(i + 1, len(axes)):
+                axes[j].set_visible(False)
+
+            fig.suptitle('Distribution of Numeric Variables', fontsize=14, fontweight='bold', y=1.02)
+
+            filepath = _get_viz_path(session_id, "distributions_grid", "all")
+            plt.tight_layout()
+            plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+            plt.close(fig)
+            generated_files.append({"type": "distributions_grid", "file": filepath})
+
+        # 3. Correlation heatmap
+        if len(numeric_df.columns) >= 2:
+            corr_matrix = numeric_df.corr()
+
+            fig, ax = plt.subplots(figsize=(12, 10))
+            mask = np.triu(np.ones_like(corr_matrix, dtype=bool), k=1)
+
+            sns.heatmap(
+                corr_matrix, mask=mask, annot=len(corr_matrix.columns) <= 12,
+                cmap=sns.diverging_palette(250, 15, s=75, l=40, n=9, center="light", as_cmap=True),
+                center=0, vmin=-1, vmax=1, square=True, linewidths=0.5,
+                cbar_kws={"shrink": 0.8}, fmt='.2f', ax=ax
+            )
+            ax.set_title('Correlation Matrix', fontsize=14, fontweight='bold')
+
+            filepath = _get_viz_path(session_id, "correlation", "matrix")
+            plt.tight_layout()
+            plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+            plt.close(fig)
+            generated_files.append({"type": "correlation_heatmap", "file": filepath})
+
+        # 4. Box plots grid
+        if len(numeric_df.columns) > 0:
+            cols_to_plot = numeric_df.columns[:8]
+            n_cols = len(cols_to_plot)
+            n_rows = (n_cols + 3) // 4
+
+            fig, axes = plt.subplots(n_rows, 4, figsize=(16, 4 * n_rows))
+            axes = axes.flatten() if n_cols > 1 else [axes]
+
+            for i, col in enumerate(cols_to_plot):
+                col_data = df[col].dropna()
+                sns.boxplot(y=col_data, ax=axes[i], color='#3498db')
+                axes[i].set_title(f'{col}', fontsize=11, fontweight='bold')
+
+            for j in range(i + 1, len(axes)):
+                axes[j].set_visible(False)
+
+            fig.suptitle('Box Plots - Outlier Detection', fontsize=14, fontweight='bold', y=1.02)
+
+            filepath = _get_viz_path(session_id, "boxplots_grid", "all")
+            plt.tight_layout()
+            plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+            plt.close(fig)
+            generated_files.append({"type": "boxplots_grid", "file": filepath})
+
+        # 5. Categorical distributions
+        cat_cols = df.select_dtypes(include=["object", "category"]).columns[:4]
+        if len(cat_cols) > 0:
+            n_cats = len(cat_cols)
+            fig, axes = plt.subplots(1, min(n_cats, 4), figsize=(5 * min(n_cats, 4), 6))
+            if n_cats == 1:
+                axes = [axes]
+
+            for i, col in enumerate(cat_cols):
+                value_counts = df[col].value_counts().head(10)
+                colors = sns.color_palette("husl", len(value_counts))
+                sns.barplot(x=value_counts.values, y=value_counts.index, ax=axes[i], hue=value_counts.index, palette=colors, legend=False)
+                axes[i].set_title(f'{col}', fontsize=11, fontweight='bold')
+                axes[i].set_xlabel('Count')
+
+            fig.suptitle('Top Categories Distribution', fontsize=14, fontweight='bold', y=1.02)
+
+            filepath = _get_viz_path(session_id, "categorical_grid", "all")
+            plt.tight_layout()
+            plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+            plt.close(fig)
+            generated_files.append({"type": "categorical_distributions", "file": filepath})
+
+        # 6. Missing values heatmap
+        missing_pct = df.isna().sum() / len(df) * 100
+        cols_with_missing = missing_pct[missing_pct > 0]
+
+        if len(cols_with_missing) > 0:
+            fig, ax = plt.subplots(figsize=(12, 6))
+
+            # Sample data for missing pattern visualization
+            sample_size = min(100, len(df))
+            sample_df = df.sample(sample_size) if len(df) > sample_size else df
+
+            sns.heatmap(sample_df.isna().T, cmap='YlOrRd', cbar_kws={'label': 'Missing'}, ax=ax)
+            ax.set_title('Missing Values Pattern (Sample)', fontsize=14, fontweight='bold')
+            ax.set_xlabel('Row Index')
+            ax.set_ylabel('Column')
+
+            filepath = _get_viz_path(session_id, "missing_pattern", "heatmap")
+            plt.tight_layout()
+            plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+            plt.close(fig)
+            generated_files.append({"type": "missing_values_pattern", "file": filepath})
+
+        result = {
+            "session_id": session_id,
+            "table_name": session["table_name"],
+            "report_type": "comprehensive_visual_eda",
+            "generated_at": datetime.now().isoformat(),
+            "visualizations_generated": len(generated_files),
+            "files": generated_files,
+            "data_summary": {
+                "total_rows": len(df),
+                "total_columns": len(df.columns),
+                "numeric_columns": len(numeric_df.columns),
+                "categorical_columns": len(df.select_dtypes(include=["object", "category"]).columns),
+                "missing_values_total": int(df.isna().sum().sum()),
+                "missing_percentage": round(df.isna().sum().sum() / (len(df) * len(df.columns)) * 100, 2)
+            },
+            "note": "Visual EDA report generated. Files saved to sample_files/eda_visualizations/"
+        }
+
+        _store_result(session_id, "visual_eda_report", result)
+
+        return json.dumps(result, indent=2, default=str)
+
+    except Exception as e:
+        return f"Error generating visual EDA report: {str(e)}"
+
+
+def _image_to_base64(filepath: str) -> str:
+    """Convert an image file to base64 string."""
+    import base64
+    with open(filepath, "rb") as f:
+        return base64.b64encode(f.read()).decode("utf-8")
+
+
+def _df_to_html_table(df, title: str = "", max_rows: int = 100) -> str:
+    """Convert a DataFrame to a styled HTML table."""
+    if len(df) > max_rows:
+        df = df.head(max_rows)
+
+    html = f"""
+    <div class="table-container">
+        {f'<h3>{title}</h3>' if title else ''}
+        <table class="styled-table">
+            <thead>
+                <tr>
+                    <th></th>
+                    {''.join(f'<th>{col}</th>' for col in df.columns)}
+                </tr>
+            </thead>
+            <tbody>
+    """
+
+    for idx, row in df.iterrows():
+        html += f"<tr><td class='row-header'>{idx}</td>"
+        for val in row:
+            if isinstance(val, float):
+                html += f"<td>{val:.4f}</td>"
+            else:
+                html += f"<td>{val}</td>"
+        html += "</tr>"
+
+    html += """
+            </tbody>
+        </table>
+    </div>
+    """
+    return html
+
+
+@tool
+def generate_eda_html_report(session_id: str, open_browser: bool = True) -> str:
+    """
+    Generate a comprehensive HTML EDA report with embedded charts and interactive tables.
+    This report can be viewed in any browser and displays all visualizations inline.
+
+    Args:
+        session_id: EDA session ID
+        open_browser: Whether to automatically open the report in browser (default True)
+
+    Returns:
+        Path to the generated HTML report file
+    """
+    if not VISUALIZATION_AVAILABLE:
+        return "Error: Visualization libraries not installed."
+
+    try:
+        if session_id not in _eda_sessions:
+            return f"Error: Session '{session_id}' not found."
+
+        session = _eda_sessions[session_id]
+        df = session.get("dataframe")
+
+        if df is None:
+            return "Error: No DataFrame in session."
+
+        table_name = session["table_name"]
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        # Initialize HTML content
+        html_sections = []
+        embedded_images = []
+
+        # ==================== HEADER ====================
+        html_header = f"""
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>EDA Report - {table_name}</title>
+            <style>
+                * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+                body {{
+                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+                    color: #e0e0e0;
+                    min-height: 100vh;
+                    padding: 20px;
+                }}
+                .container {{ max-width: 1400px; margin: 0 auto; }}
+
+                /* Header */
+                .header {{
+                    background: linear-gradient(135deg, #0f3460 0%, #16213e 100%);
+                    border-radius: 15px;
+                    padding: 30px;
+                    margin-bottom: 30px;
+                    box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+                    border: 1px solid #0f3460;
+                }}
+                .header h1 {{
+                    color: #00d4aa;
+                    font-size: 2.5rem;
+                    margin-bottom: 10px;
+                }}
+                .header .subtitle {{
+                    color: #94a3b8;
+                    font-size: 1.1rem;
+                }}
+                .header .meta {{
+                    display: flex;
+                    gap: 30px;
+                    margin-top: 20px;
+                    flex-wrap: wrap;
+                }}
+                .header .meta-item {{
+                    background: rgba(0, 212, 170, 0.1);
+                    padding: 10px 20px;
+                    border-radius: 8px;
+                    border: 1px solid #00d4aa;
+                }}
+                .header .meta-item .label {{ color: #94a3b8; font-size: 0.85rem; }}
+                .header .meta-item .value {{ color: #00d4aa; font-size: 1.3rem; font-weight: bold; }}
+
+                /* Sections */
+                .section {{
+                    background: rgba(30, 41, 59, 0.8);
+                    border-radius: 15px;
+                    padding: 25px;
+                    margin-bottom: 25px;
+                    box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+                    border: 1px solid #334155;
+                }}
+                .section h2 {{
+                    color: #00d4aa;
+                    font-size: 1.5rem;
+                    margin-bottom: 20px;
+                    padding-bottom: 10px;
+                    border-bottom: 2px solid #00d4aa;
+                }}
+                .section h3 {{
+                    color: #74b9ff;
+                    font-size: 1.2rem;
+                    margin: 15px 0 10px 0;
+                }}
+
+                /* Charts Grid */
+                .chart-grid {{
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+                    gap: 20px;
+                }}
+                .chart-container {{
+                    background: #1e293b;
+                    border-radius: 10px;
+                    padding: 15px;
+                    border: 1px solid #334155;
+                }}
+                .chart-container img {{
+                    width: 100%;
+                    height: auto;
+                    border-radius: 8px;
+                }}
+                .chart-container .chart-title {{
+                    color: #f1f5f9;
+                    font-size: 1rem;
+                    font-weight: 600;
+                    margin-bottom: 10px;
+                    text-align: center;
+                }}
+
+                /* Full Width Charts */
+                .chart-full {{
+                    grid-column: 1 / -1;
+                }}
+                .chart-full img {{
+                    max-width: 900px;
+                    margin: 0 auto;
+                    display: block;
+                }}
+
+                /* Tables */
+                .table-container {{
+                    overflow-x: auto;
+                    margin: 15px 0;
+                }}
+                .styled-table {{
+                    width: 100%;
+                    border-collapse: collapse;
+                    font-size: 0.9rem;
+                    background: #1e293b;
+                    border-radius: 10px;
+                    overflow: hidden;
+                }}
+                .styled-table thead tr {{
+                    background: linear-gradient(135deg, #00d4aa 0%, #00b894 100%);
+                    color: #1a1a2e;
+                    text-align: left;
+                    font-weight: bold;
+                }}
+                .styled-table th, .styled-table td {{
+                    padding: 12px 15px;
+                    border-bottom: 1px solid #334155;
+                }}
+                .styled-table tbody tr:hover {{
+                    background: rgba(0, 212, 170, 0.1);
+                }}
+                .styled-table .row-header {{
+                    background: #0f3460;
+                    color: #00d4aa;
+                    font-weight: 600;
+                }}
+
+                /* Quality Score */
+                .quality-score {{
+                    display: flex;
+                    align-items: center;
+                    gap: 20px;
+                    padding: 20px;
+                    background: #1e293b;
+                    border-radius: 10px;
+                    margin: 15px 0;
+                }}
+                .quality-grade {{
+                    width: 80px;
+                    height: 80px;
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 2.5rem;
+                    font-weight: bold;
+                    color: white;
+                }}
+                .grade-A {{ background: linear-gradient(135deg, #10b981, #059669); }}
+                .grade-B {{ background: linear-gradient(135deg, #3b82f6, #2563eb); }}
+                .grade-C {{ background: linear-gradient(135deg, #f59e0b, #d97706); }}
+                .grade-D {{ background: linear-gradient(135deg, #ef4444, #dc2626); }}
+                .grade-F {{ background: linear-gradient(135deg, #991b1b, #7f1d1d); }}
+
+                /* Insights */
+                .insight-card {{
+                    background: rgba(0, 212, 170, 0.1);
+                    border: 1px solid #00d4aa;
+                    border-radius: 10px;
+                    padding: 15px;
+                    margin: 10px 0;
+                }}
+                .insight-card.warning {{
+                    background: rgba(245, 158, 11, 0.1);
+                    border-color: #f59e0b;
+                }}
+                .insight-card.error {{
+                    background: rgba(239, 68, 68, 0.1);
+                    border-color: #ef4444;
+                }}
+
+                /* Navigation */
+                .nav {{
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    background: #1e293b;
+                    border-radius: 10px;
+                    padding: 15px;
+                    border: 1px solid #334155;
+                    z-index: 1000;
+                }}
+                .nav a {{
+                    display: block;
+                    color: #94a3b8;
+                    text-decoration: none;
+                    padding: 5px 10px;
+                    font-size: 0.85rem;
+                }}
+                .nav a:hover {{ color: #00d4aa; }}
+
+                /* Footer */
+                .footer {{
+                    text-align: center;
+                    padding: 20px;
+                    color: #64748b;
+                    font-size: 0.85rem;
+                }}
+            </style>
+        </head>
+        <body>
+        <div class="container">
+        """
+
+        # ==================== REPORT HEADER ====================
+        numeric_df = df.select_dtypes(include=[np.number])
+        cat_df = df.select_dtypes(include=["object", "category"])
+
+        html_header += f"""
+        <div class="header">
+            <h1>📊 EDA Report: {table_name}</h1>
+            <p class="subtitle">Comprehensive Exploratory Data Analysis with Visualizations</p>
+            <div class="meta">
+                <div class="meta-item">
+                    <div class="label">Total Rows</div>
+                    <div class="value">{len(df):,}</div>
+                </div>
+                <div class="meta-item">
+                    <div class="label">Total Columns</div>
+                    <div class="value">{len(df.columns)}</div>
+                </div>
+                <div class="meta-item">
+                    <div class="label">Numeric Columns</div>
+                    <div class="value">{len(numeric_df.columns)}</div>
+                </div>
+                <div class="meta-item">
+                    <div class="label">Categorical Columns</div>
+                    <div class="value">{len(cat_df.columns)}</div>
+                </div>
+                <div class="meta-item">
+                    <div class="label">Missing Values</div>
+                    <div class="value">{df.isna().sum().sum():,}</div>
+                </div>
+                <div class="meta-item">
+                    <div class="label">Generated</div>
+                    <div class="value">{datetime.now().strftime("%Y-%m-%d %H:%M")}</div>
+                </div>
+            </div>
+        </div>
+
+        <nav class="nav">
+            <strong style="color: #00d4aa;">📑 Sections</strong>
+            <a href="#summary">Summary Statistics</a>
+            <a href="#distributions">Distributions</a>
+            <a href="#correlations">Correlations</a>
+            <a href="#outliers">Outliers</a>
+            <a href="#categorical">Categorical Analysis</a>
+            <a href="#quality">Data Quality</a>
+        </nav>
+        """
+
+        html_sections.append(html_header)
+
+        # ==================== SUMMARY STATISTICS TABLE ====================
+        if len(numeric_df.columns) > 0:
+            stats_df = numeric_df.describe().T
+            stats_df['missing'] = df[numeric_df.columns].isna().sum()
+            stats_df['missing_%'] = (df[numeric_df.columns].isna().sum() / len(df) * 100).round(2)
+
+            if SCIPY_AVAILABLE:
+                stats_df['skewness'] = [round(stats.skew(df[col].dropna()), 4) for col in numeric_df.columns]
+
+            summary_html = f"""
+            <div class="section" id="summary">
+                <h2>📈 Summary Statistics</h2>
+                {_df_to_html_table(stats_df.round(4), "")}
+            </div>
+            """
+            html_sections.append(summary_html)
+
+        # ==================== DISTRIBUTION HISTOGRAMS ====================
+        if len(numeric_df.columns) > 0:
+            dist_html = '<div class="section" id="distributions"><h2>📊 Distribution Analysis</h2><div class="chart-grid">'
+
+            for col in numeric_df.columns[:8]:
+                fig, ax = plt.subplots(figsize=(8, 5))
+                col_data = df[col].dropna()
+
+                sns.histplot(col_data, kde=True, ax=ax, color='#00d4aa', alpha=0.7)
+                ax.axvline(col_data.mean(), color='#ff6b6b', linestyle='--', linewidth=2, label=f'Mean: {col_data.mean():.2f}')
+                ax.axvline(col_data.median(), color='#ffd93d', linestyle='-.', linewidth=2, label=f'Median: {col_data.median():.2f}')
+                ax.set_title(f'{col}', fontsize=12, fontweight='bold', color='#333')
+                ax.legend(fontsize=9)
+                ax.set_facecolor('#f8fafc')
+                fig.patch.set_facecolor('white')
+
+                # Save to memory and convert to base64
+                from io import BytesIO
+                buf = BytesIO()
+                plt.tight_layout()
+                plt.savefig(buf, format='png', dpi=120, bbox_inches='tight', facecolor='white')
+                plt.close(fig)
+                buf.seek(0)
+                import base64
+                img_base64 = base64.b64encode(buf.read()).decode('utf-8')
+
+                dist_html += f'''
+                <div class="chart-container">
+                    <div class="chart-title">{col}</div>
+                    <img src="data:image/png;base64,{img_base64}" alt="{col} histogram">
+                </div>
+                '''
+
+            dist_html += '</div></div>'
+            html_sections.append(dist_html)
+
+        # ==================== CORRELATION HEATMAP ====================
+        if len(numeric_df.columns) >= 2:
+            corr_matrix = numeric_df.corr()
+
+            fig, ax = plt.subplots(figsize=(10, 8))
+            mask = np.triu(np.ones_like(corr_matrix, dtype=bool), k=1)
+            cmap = sns.diverging_palette(250, 15, s=75, l=40, n=9, center="light", as_cmap=True)
+
+            sns.heatmap(corr_matrix, mask=mask, annot=len(corr_matrix.columns) <= 12,
+                       cmap=cmap, center=0, vmin=-1, vmax=1, square=True,
+                       linewidths=0.5, cbar_kws={"shrink": 0.8}, fmt='.2f', ax=ax)
+            ax.set_title('Correlation Matrix', fontsize=14, fontweight='bold')
+            fig.patch.set_facecolor('white')
+
+            buf = BytesIO()
+            plt.tight_layout()
+            plt.savefig(buf, format='png', dpi=120, bbox_inches='tight', facecolor='white')
+            plt.close(fig)
+            buf.seek(0)
+            img_base64 = base64.b64encode(buf.read()).decode('utf-8')
+
+            # Find high correlations
+            high_corr = []
+            for i in range(len(corr_matrix.columns)):
+                for j in range(i+1, len(corr_matrix.columns)):
+                    corr_val = corr_matrix.iloc[i, j]
+                    if abs(corr_val) >= 0.5:
+                        high_corr.append(f"{corr_matrix.columns[i]} ↔ {corr_matrix.columns[j]}: {corr_val:.3f}")
+
+            corr_html = f'''
+            <div class="section" id="correlations">
+                <h2>🔗 Correlation Analysis</h2>
+                <div class="chart-grid">
+                    <div class="chart-container chart-full">
+                        <div class="chart-title">Correlation Heatmap</div>
+                        <img src="data:image/png;base64,{img_base64}" alt="Correlation Heatmap">
+                    </div>
+                </div>
+                {"<h3>High Correlations (|r| ≥ 0.5)</h3><div class='insight-card'>" + "<br>".join(high_corr) + "</div>" if high_corr else ""}
+            </div>
+            '''
+            html_sections.append(corr_html)
+
+        # ==================== BOX PLOTS (OUTLIERS) ====================
+        if len(numeric_df.columns) > 0:
+            outlier_html = '<div class="section" id="outliers"><h2>📦 Box Plots & Outlier Detection</h2><div class="chart-grid">'
+
+            outlier_insights = []
+            for col in numeric_df.columns[:6]:
+                fig, ax = plt.subplots(figsize=(6, 5))
+                col_data = df[col].dropna()
+
+                sns.boxplot(y=col_data, ax=ax, color='#74b9ff', width=0.4)
+                ax.set_title(f'{col}', fontsize=12, fontweight='bold')
+                fig.patch.set_facecolor('white')
+
+                # Calculate outliers
+                Q1, Q3 = col_data.quantile(0.25), col_data.quantile(0.75)
+                IQR = Q3 - Q1
+                outliers = col_data[(col_data < Q1 - 1.5*IQR) | (col_data > Q3 + 1.5*IQR)]
+                if len(outliers) > 0:
+                    outlier_insights.append(f"{col}: {len(outliers)} outliers ({len(outliers)/len(col_data)*100:.1f}%)")
+
+                buf = BytesIO()
+                plt.tight_layout()
+                plt.savefig(buf, format='png', dpi=120, bbox_inches='tight', facecolor='white')
+                plt.close(fig)
+                buf.seek(0)
+                img_base64 = base64.b64encode(buf.read()).decode('utf-8')
+
+                outlier_html += f'''
+                <div class="chart-container">
+                    <div class="chart-title">{col}</div>
+                    <img src="data:image/png;base64,{img_base64}" alt="{col} boxplot">
+                </div>
+                '''
+
+            outlier_html += '</div>'
+            if outlier_insights:
+                outlier_html += '<h3>Outlier Summary</h3><div class="insight-card warning">' + '<br>'.join(outlier_insights) + '</div>'
+            outlier_html += '</div>'
+            html_sections.append(outlier_html)
+
+        # ==================== CATEGORICAL DISTRIBUTIONS ====================
+        if len(cat_df.columns) > 0:
+            cat_html = '<div class="section" id="categorical"><h2>📊 Categorical Distributions</h2><div class="chart-grid">'
+
+            for col in cat_df.columns[:6]:
+                value_counts = df[col].value_counts().head(10)
+
+                fig, ax = plt.subplots(figsize=(8, 5))
+                colors = sns.color_palette("husl", len(value_counts))
+                bars = ax.barh(range(len(value_counts)), value_counts.values, color=colors)
+                ax.set_yticks(range(len(value_counts)))
+                ax.set_yticklabels([str(v)[:30] for v in value_counts.index])
+                ax.invert_yaxis()
+                ax.set_xlabel('Count')
+                ax.set_title(f'{col} (Top 10)', fontsize=12, fontweight='bold')
+                fig.patch.set_facecolor('white')
+
+                # Add value labels
+                for bar, val in zip(bars, value_counts.values):
+                    ax.text(val + max(value_counts.values) * 0.01, bar.get_y() + bar.get_height()/2,
+                           f'{val:,}', va='center', fontsize=9)
+
+                buf = BytesIO()
+                plt.tight_layout()
+                plt.savefig(buf, format='png', dpi=120, bbox_inches='tight', facecolor='white')
+                plt.close(fig)
+                buf.seek(0)
+                img_base64 = base64.b64encode(buf.read()).decode('utf-8')
+
+                cat_html += f'''
+                <div class="chart-container">
+                    <div class="chart-title">{col}</div>
+                    <img src="data:image/png;base64,{img_base64}" alt="{col} distribution">
+                </div>
+                '''
+
+            cat_html += '</div></div>'
+            html_sections.append(cat_html)
+
+        # ==================== DATA QUALITY ====================
+        # Calculate quality metrics
+        total_cells = len(df) * len(df.columns)
+        missing_cells = df.isna().sum().sum()
+        completeness = (total_cells - missing_cells) / total_cells * 100
+        duplicates = df.duplicated().sum()
+        uniqueness = (len(df) - duplicates) / len(df) * 100
+
+        overall_score = completeness * 0.5 + uniqueness * 0.5
+
+        if overall_score >= 90:
+            grade, grade_class = "A", "grade-A"
+        elif overall_score >= 80:
+            grade, grade_class = "B", "grade-B"
+        elif overall_score >= 70:
+            grade, grade_class = "C", "grade-C"
+        elif overall_score >= 60:
+            grade, grade_class = "D", "grade-D"
+        else:
+            grade, grade_class = "F", "grade-F"
+
+        quality_html = f'''
+        <div class="section" id="quality">
+            <h2>✅ Data Quality Assessment</h2>
+            <div class="quality-score">
+                <div class="quality-grade {grade_class}">{grade}</div>
+                <div>
+                    <h3 style="color: #00d4aa; margin-bottom: 10px;">Overall Score: {overall_score:.1f}%</h3>
+                    <p>Completeness: {completeness:.1f}% | Uniqueness: {uniqueness:.1f}%</p>
+                    <p style="color: #94a3b8;">Missing Values: {int(missing_cells):,} | Duplicate Rows: {int(duplicates):,}</p>
+                </div>
+            </div>
+        </div>
+        '''
+        html_sections.append(quality_html)
+
+        # ==================== FOOTER ====================
+        html_footer = f'''
+        <div class="footer">
+            <p>Generated by EDA Agent | {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
+            <p>Powered by Seaborn, Matplotlib, and Pandas</p>
+        </div>
+        </div>
+        </body>
+        </html>
+        '''
+        html_sections.append(html_footer)
+
+        # ==================== SAVE HTML FILE ====================
+        html_content = '\n'.join(html_sections)
+
+        # Ensure output directory exists
+        html_output_dir = os.path.join(VIZ_OUTPUT_DIR, "reports")
+        os.makedirs(html_output_dir, exist_ok=True)
+
+        html_filepath = os.path.join(html_output_dir, f"eda_report_{table_name}_{timestamp}.html")
+        with open(html_filepath, 'w', encoding='utf-8') as f:
+            f.write(html_content)
+
+        # Open in browser if requested
+        if open_browser:
+            import webbrowser
+            webbrowser.open(f'file://{os.path.abspath(html_filepath)}')
+
+        result = {
+            "session_id": session_id,
+            "table_name": table_name,
+            "report_type": "html_eda_report",
+            "html_file": html_filepath,
+            "generated_at": datetime.now().isoformat(),
+            "sections": ["Summary Statistics", "Distributions", "Correlations", "Outliers", "Categorical", "Data Quality"],
+            "data_summary": {
+                "rows": len(df),
+                "columns": len(df.columns),
+                "quality_score": round(overall_score, 1),
+                "quality_grade": grade
+            },
+            "note": f"HTML report generated and opened in browser. File: {html_filepath}"
+        }
+
+        _store_result(session_id, "html_eda_report", result)
+
+        return json.dumps(result, indent=2, default=str)
+
+    except Exception as e:
+        import traceback
+        return f"Error generating HTML report: {str(e)}\n{traceback.format_exc()}"
+
+
+# =============================================================================
 # REGISTER TOOLS WITH REGISTRY
 # =============================================================================
 
@@ -2218,6 +3982,18 @@ tool_registry.register(execute_custom_analysis, "eda")
 tool_registry.register(get_eda_summary, "eda")
 tool_registry.register(get_session_info, "eda")
 tool_registry.register(list_eda_sessions, "eda")
+
+# Visualization tools
+tool_registry.register(plot_histogram, "eda")
+tool_registry.register(plot_boxplot, "eda")
+tool_registry.register(plot_bar_chart, "eda")
+tool_registry.register(plot_scatter, "eda")
+tool_registry.register(plot_correlation_heatmap, "eda")
+tool_registry.register(plot_pairplot, "eda")
+tool_registry.register(plot_class_distribution, "eda")
+tool_registry.register(plot_violin, "eda")
+tool_registry.register(generate_eda_visual_report, "eda")
+tool_registry.register(generate_eda_html_report, "eda")
 
 
 def get_eda_tools():

@@ -42,6 +42,19 @@ from test_examples import (
     get_examples_by_tool
 )
 
+# Import EDA visualization test examples
+from test_examples_eda import (
+    EDA_VIZ_SIMPLE_EXAMPLES,
+    EDA_VIZ_MEDIUM_EXAMPLES,
+    EDA_VIZ_COMPLEX_EXAMPLES,
+    EDA_EDGE_CASES,
+    EDA_VISUALIZATION_EXAMPLES,
+    EDA_HTML_REPORT_EXAMPLES,
+    get_all_eda_examples as get_all_eda_viz_examples,
+    get_eda_examples_by_category as get_eda_viz_examples_by_category,
+    get_eda_examples_by_tool as get_eda_viz_examples_by_tool
+)
+
 
 @dataclass
 class TestResult:
@@ -208,6 +221,14 @@ class TestRunner:
             'wealth_medium': WEALTH_MEDIUM_EXAMPLES,
             'wealth_complex': WEALTH_COMPLEX_EXAMPLES,
             'wealth': WEALTH_SIMPLE_EXAMPLES + WEALTH_MEDIUM_EXAMPLES + WEALTH_COMPLEX_EXAMPLES,
+            # EDA Visualization categories (from test_examples_eda.py)
+            'eda_viz_simple': EDA_VIZ_SIMPLE_EXAMPLES,
+            'eda_viz_medium': EDA_VIZ_MEDIUM_EXAMPLES,
+            'eda_viz_complex': EDA_VIZ_COMPLEX_EXAMPLES,
+            'eda_viz_edge': EDA_EDGE_CASES,
+            'eda_viz_charts': EDA_VISUALIZATION_EXAMPLES,
+            'eda_viz_html': EDA_HTML_REPORT_EXAMPLES,
+            'eda_viz': get_all_eda_viz_examples(),
         }
         
         if category not in categories:
@@ -235,7 +256,8 @@ class TestRunner:
         for category in ['simple', 'medium', 'complex', 'edge', 'conversational',
                          'sql_simple', 'sql_medium', 'sql_complex',
                          'name_simple', 'name_medium', 'name_complex',
-                         'wealth_simple', 'wealth_medium', 'wealth_complex']:
+                         'wealth_simple', 'wealth_medium', 'wealth_complex',
+                         'eda_viz_simple', 'eda_viz_medium', 'eda_viz_complex', 'eda_viz_edge', 'eda_viz_charts', 'eda_viz_html']:
             results = self.run_category(category)
             all_results.extend(results)
 
@@ -384,7 +406,10 @@ def main():
                         choices=['simple', 'medium', 'complex', 'edge', 'conversational',
                                  'sql', 'sql_simple', 'sql_medium', 'sql_complex',
                                  'name_matching', 'name_simple', 'name_medium', 'name_complex',
-                                 'wealth', 'wealth_simple', 'wealth_medium', 'wealth_complex', 'all'],
+                                 'wealth', 'wealth_simple', 'wealth_medium', 'wealth_complex',
+                                 'eda_viz', 'eda_viz_simple', 'eda_viz_medium', 'eda_viz_complex',
+                                 'eda_viz_edge', 'eda_viz_charts', 'eda_viz_html',
+                                 'all'],
                         help='Test category to run')
     parser.add_argument('--agent', '-a', help='Run tests for specific agent')
     parser.add_argument('--interactive', '-i', action='store_true', help='Interactive mode')
