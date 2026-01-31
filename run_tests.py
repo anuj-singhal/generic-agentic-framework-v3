@@ -55,6 +55,16 @@ from test_examples_eda import (
     get_eda_examples_by_tool as get_eda_viz_examples_by_tool
 )
 
+# Import Multi-EDA agent test examples
+from eda_test_examples import (
+    MULTI_EDA_SIMPLE_EXAMPLES,
+    MULTI_EDA_MEDIUM_EXAMPLES,
+    MULTI_EDA_COMPLEX_EXAMPLES,
+    get_all_multi_eda_examples,
+    get_multi_eda_examples_by_category,
+    get_multi_eda_examples_by_tool
+)
+
 
 @dataclass
 class TestResult:
@@ -229,6 +239,11 @@ class TestRunner:
             'eda_viz_charts': EDA_VISUALIZATION_EXAMPLES,
             'eda_viz_html': EDA_HTML_REPORT_EXAMPLES,
             'eda_viz': get_all_eda_viz_examples(),
+            # Multi-EDA agent categories
+            'multi_eda_simple': MULTI_EDA_SIMPLE_EXAMPLES,
+            'multi_eda_medium': MULTI_EDA_MEDIUM_EXAMPLES,
+            'multi_eda_complex': MULTI_EDA_COMPLEX_EXAMPLES,
+            'multi_eda': get_all_multi_eda_examples(),
         }
         
         if category not in categories:
@@ -257,7 +272,8 @@ class TestRunner:
                          'sql_simple', 'sql_medium', 'sql_complex',
                          'name_simple', 'name_medium', 'name_complex',
                          'wealth_simple', 'wealth_medium', 'wealth_complex',
-                         'eda_viz_simple', 'eda_viz_medium', 'eda_viz_complex', 'eda_viz_edge', 'eda_viz_charts', 'eda_viz_html']:
+                         'eda_viz_simple', 'eda_viz_medium', 'eda_viz_complex', 'eda_viz_edge', 'eda_viz_charts', 'eda_viz_html',
+                         'multi_eda_simple', 'multi_eda_medium', 'multi_eda_complex']:
             results = self.run_category(category)
             all_results.extend(results)
 
@@ -266,7 +282,9 @@ class TestRunner:
     def run_for_agent(self, agent_name: str) -> List[TestResult]:
         """Run all tests for a specific agent."""
         examples = get_examples_by_agent(agent_name)
-        
+        # Also check multi-EDA examples
+        examples += [ex for ex in get_all_multi_eda_examples() if ex['agent'] == agent_name]
+
         if not examples:
             print(f"[ERROR] No examples found for agent: {agent_name}")
             return []

@@ -1194,6 +1194,25 @@ def get_agent_icon(agent_id: str) -> str:
         "agent5.3": "🎯",
         "retry": "🔄",
         "agent6": "🚀",
+        # Multi-EDA agent icons
+        "eda_agent1": "🔍",
+        "eda_agent2": "📋",
+        "eda_agent3": "📥",
+        "eda_agent4": "🔗",
+        "eda_agent5": "🏗️",
+        "eda_agent6": "📊",
+        "eda_agent7": "📈",
+        "eda_agent7.1": "📊",
+        "eda_agent7.2": "📉",
+        "eda_agent7.3": "📶",
+        "eda_agent8": "🎯",
+        "eda_agent8.1": "📦",
+        "eda_agent8.2": "🎻",
+        "eda_agent8.3": "📐",
+        "eda_agent9": "🔎",
+        "eda_agent10": "🔥",
+        "eda_agent11": "🧠",
+        "eda_agent12": "🎨",
     }
     return icon_map.get(agent_id, "🔷")
 
@@ -1229,6 +1248,25 @@ def render_agent_trace_card(trace: dict, container, expanded: bool = False):
         "agent5.3": "#c2185b",
         "retry": "#ffa000",
         "agent6": "#0097a7",
+        # Multi-EDA agent colors
+        "eda_agent1": "#1976d2",
+        "eda_agent2": "#7b1fa2",
+        "eda_agent3": "#303f9f",
+        "eda_agent4": "#ef6c00",
+        "eda_agent5": "#5d4037",
+        "eda_agent6": "#00838f",
+        "eda_agent7": "#2e7d32",
+        "eda_agent7.1": "#2e7d32",
+        "eda_agent7.2": "#388e3c",
+        "eda_agent7.3": "#43a047",
+        "eda_agent8": "#ad1457",
+        "eda_agent8.1": "#ad1457",
+        "eda_agent8.2": "#c2185b",
+        "eda_agent8.3": "#d81b60",
+        "eda_agent9": "#c62828",
+        "eda_agent10": "#ff8f00",
+        "eda_agent11": "#4527a0",
+        "eda_agent12": "#00695c",
     }
     border_color = border_colors.get(agent_id, "#757575")
 
@@ -1266,6 +1304,26 @@ def render_agent_trace_card(trace: dict, container, expanded: bool = False):
     # Add retry info
     if details.get("retry_count", 0) > 0:
         details_parts.append(f"⚠️ **Retry Attempt #{details['retry_count'] + 1}**")
+
+    # EDA-specific details
+    if "session_id" in details and details["session_id"]:
+        details_parts.append(f"**Session:** `{details['session_id']}`")
+    if "count" in details and details["count"]:
+        details_parts.append(f"**Charts:** {details['count']}")
+    if "target" in details and details["target"]:
+        details_parts.append(f"**Target:** {details['target']}")
+    if "method" in details:
+        details_parts.append(f"**Method:** {details['method']}")
+    if "strong_correlations" in details:
+        details_parts.append(f"**Strong Correlations:** {details['strong_correlations']}")
+    if "cleaning_count" in details:
+        details_parts.append(f"**Cleaning:** {details['cleaning_count']} | **Feature Eng:** {details.get('feature_eng_count', 0)}")
+    if "dashboard_path" in details and details["dashboard_path"]:
+        details_parts.append(f"**Dashboard:** ✅")
+    if "shape" in details and isinstance(details["shape"], dict):
+        shape = details["shape"]
+        if shape.get("rows"):
+            details_parts.append(f"**Shape:** {shape['rows']}x{shape.get('columns', '?')}")
 
     # Add SQL preview for generator
     sql_preview = details.get("sql_preview", "")
@@ -1563,6 +1621,162 @@ def run_multi_agent_with_streaming(mission: str, trace_container, status_placeho
                 query_results=query_results,
                 tables_used=related_tables
             )
+
+    return result
+
+
+def run_multi_eda_with_streaming(mission: str, trace_container, status_placeholder, react_container=None):
+    """Run the multi-EDA orchestrator with real-time trace updates."""
+    from core.multi_eda_orchestrator import MultiEDAOrchestrator
+    from core.config import FrameworkConfig, ModelConfig
+
+    # Create config
+    config = FrameworkConfig(
+        model=ModelConfig(
+            model_name=st.session_state.model_name,
+            temperature=st.session_state.temperature,
+            api_key=st.session_state.api_key
+        ),
+        max_iterations=st.session_state.max_iterations
+    )
+
+    orchestrator = MultiEDAOrchestrator(config=config)
+
+    # Initialize token counter
+    token_counter = get_token_counter(st.session_state.model_name)
+
+    # Build memory context for Agent1 (same pattern as multi_data_agent)
+    short_term_memory = None
+    long_term_memory = None
+
+    # Build short-term memory from recent conversations
+    if st.session_state.conversation_memory:
+        st_parts = []
+        for i, conv in enumerate(st.session_state.conversation_memory, 1):
+            intent = conv.get('intent', 'unknown')
+            st_parts.append(f"--- Conversation {i} (Agent: {conv.get('agent', 'unknown')}, Intent: {intent}) ---")
+            st_parts.append(f"User Query: {conv.get('query', '')}")
+
+            # Include EDA-specific details if available
+            dashboard_path = conv.get('dashboard_path')
+            if dashboard_path:
+                st_parts.append(f"Dashboard: {dashboard_path}")
+
+            deep_analysis = conv.get('deep_analysis')
+            if deep_analysis:
+                if len(deep_analysis) > 500:
+                    deep_analysis = deep_analysis[:500] + "..."
+                st_parts.append(f"EDA Analysis: {deep_analysis}")
+
+            # Include general response
+            response = conv.get('response', '')
+            if len(response) > 500:
+                response = response[:500] + "..."
+            st_parts.append(f"Assistant Response: {response}")
+            st_parts.append("")
+
+        short_term_memory = "\n".join(st_parts)
+
+    # Build long-term memory from historical summaries
+    if st.session_state.long_term_memory:
+        lt_parts = []
+        for i, mem in enumerate(st.session_state.long_term_memory, 1):
+            lt_parts.append(f"--- Summary {i} (Conversations {mem.get('conversation_range', 'unknown')}) ---")
+            lt_parts.append(mem.get("summary", ""))
+            lt_parts.append("")
+        long_term_memory = "\n".join(lt_parts)
+
+    # Track displayed traces and messages
+    displayed_traces = set()
+    displayed_messages = set()
+    final_state = None
+    all_traces = []
+    all_messages = []
+
+    # Render header
+    trace_container.markdown("### 🔬 Multi-EDA Agent Workflow")
+    agents_container = trace_container.container()
+
+    try:
+        for state_update in orchestrator.stream(
+            mission,
+            short_term_memory=short_term_memory,
+            long_term_memory=long_term_memory
+        ):
+            for node_name, node_state in state_update.items():
+                if node_name == "__end__":
+                    continue
+
+                current_agent = node_state.get("current_agent", "processing")
+                agent_display = current_agent.replace("_", " ").title()
+                status_placeholder.markdown(f"**🔄 EDA Processing: {agent_display}...**")
+
+                traces = node_state.get("agent_traces", [])
+                for i, trace in enumerate(traces):
+                    trace_id = f"{trace.get('agent_id')}_{trace.get('timestamp', i)}"
+                    if trace_id not in displayed_traces:
+                        displayed_traces.add(trace_id)
+                        all_traces.append(trace)
+                        render_agent_trace_card(trace, agents_container)
+                        if react_container:
+                            render_agent_trace_as_react(trace, react_container)
+
+                messages = node_state.get("messages", [])
+                for msg in messages:
+                    if msg not in all_messages:
+                        all_messages.append(msg)
+
+                final_state = node_state
+
+    except Exception as e:
+        trace_container.error(f"Error during EDA execution: {str(e)}")
+        return {
+            "error": str(e),
+            "is_complete": True,
+            "final_answer": f"An error occurred: {str(e)}",
+            "agent_traces": all_traces,
+            "messages": all_messages
+        }
+
+    # Token stats
+    execution_tokens = 0
+    input_tokens = 0
+    output_tokens = 0
+
+    for trace in all_traces:
+        trace_tokens = len(str(trace)) // 4
+        execution_tokens += trace_tokens
+        output_tokens += trace_tokens
+
+    for msg in all_messages:
+        msg_tokens = token_counter.count_message(msg)
+        execution_tokens += msg_tokens
+        if hasattr(msg, 'type') and msg.type == 'human':
+            input_tokens += msg_tokens
+        else:
+            output_tokens += msg_tokens
+
+    st.session_state.total_tokens += execution_tokens
+    st.session_state.last_input_tokens = input_tokens
+    st.session_state.last_output_tokens = output_tokens
+    st.session_state.last_total_tokens = execution_tokens
+
+    result = {
+        "messages": final_state.get("messages", []) if final_state else all_messages,
+        "mission": mission,
+        "agent_traces": all_traces,
+        "is_complete": True,
+        "final_answer": final_state.get("general_answer") if final_state else None,
+        "dashboard_path": final_state.get("dashboard_path") if final_state else None,
+        "deep_analysis": final_state.get("deep_analysis") if final_state else None,
+        "error": final_state.get("error") if final_state else None,
+        "is_multi_eda": True,
+        "token_stats": {
+            "total_tokens": execution_tokens,
+            "prompt_tokens": input_tokens,
+            "completion_tokens": output_tokens
+        }
+    }
 
     return result
 
@@ -2149,6 +2363,79 @@ def main():
                         )
 
                         # Rerun to update sidebar token display
+                        st.rerun()
+                elif st.session_state.current_agent == "multi_eda_agent":
+                    # Run multi-EDA agent with live trace streaming
+                    with st.chat_message("assistant"):
+                        status_placeholder = st.empty()
+                        status_placeholder.markdown("**🔄 Multi-EDA Agent Orchestrator initializing...**")
+
+                        with st.expander("🔬 Multi-EDA Agent Workflow Trace (Live)", expanded=True):
+                            trace_container = st.container()
+
+                        with st.expander("🔍 ReAct Execution Trace (Live)", expanded=False):
+                            react_container = st.container()
+
+                        answer_placeholder = st.empty()
+
+                        result = run_multi_eda_with_streaming(prompt, trace_container, status_placeholder, react_container)
+
+                        final_answer = result.get("final_answer") or result.get("general_answer") or "No result generated."
+                        status_placeholder.empty()
+
+                        # Show dashboard link if generated
+                        dashboard_path = result.get("dashboard_path")
+                        if dashboard_path:
+                            st.success(f"📊 Dashboard generated: `{dashboard_path}`")
+
+                        # Show final answer
+                        st.markdown(f"""
+                        <div class="final-answer">
+                            <strong>✅ EDA Complete:</strong><br><br>
+                            {final_answer}
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                        st.session_state.messages.append({
+                            "role": "assistant",
+                            "content": final_answer,
+                            "trace": result,
+                            "is_multi_agent": True,
+                            "is_multi_eda": True
+                        })
+
+                        st.session_state.execution_history.append({
+                            "timestamp": datetime.now().isoformat(),
+                            "agent": st.session_state.current_agent,
+                            "mission": prompt,
+                            "result": result
+                        })
+
+                        token_stats = result.get("token_stats", {})
+                        total_tokens = token_stats.get("total_tokens", 0)
+
+                        # Extract intent from traces
+                        eda_intent = None
+                        agent_traces = result.get("agent_traces", [])
+                        for trace in agent_traces:
+                            if trace.get("agent_id") == "eda_agent1":
+                                eda_intent = trace.get("details", {}).get("intent")
+                                break
+
+                        store_in_memory(
+                            query=prompt,
+                            response=final_answer,
+                            agent=st.session_state.current_agent,
+                            tokens=total_tokens,
+                            intent=eda_intent
+                        )
+
+                        # Store EDA-specific fields in the last conversation entry
+                        if st.session_state.conversation_memory:
+                            last_conv = st.session_state.conversation_memory[-1]
+                            last_conv["dashboard_path"] = result.get("dashboard_path")
+                            last_conv["deep_analysis"] = result.get("deep_analysis")
+
                         st.rerun()
                 else:
                     # Run standard agent with real-time streaming
